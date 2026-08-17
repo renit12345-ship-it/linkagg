@@ -1275,9 +1275,20 @@ HTMLWidgets.widget({
         var w;
         try { w = txt.node().getComputedTextLength(); } catch (e) { w = 0; }
         if (!w) w = String(agg.levels[t]).length * 5;
-        var box = { x0: p.cx - w / 2 - 3, x1: p.cx + w / 2 + 3,
+        // A label that would overhang an edge is re-anchored rather than
+        // dropped: the terms furthest from the origin are the ones worth
+        // naming, and they are exactly the ones nearest the edges.
+        var bx0 = p.cx - w / 2 - 3, bx1 = p.cx + w / 2 + 3;
+        if (bx0 < V.x0) {
+          txt.attr("text-anchor", "start").attr("x", p.cx - p.r);
+          bx0 = p.cx - p.r - 2; bx1 = bx0 + w + 5;
+        } else if (bx1 > V.x0 + V.w) {
+          txt.attr("text-anchor", "end").attr("x", p.cx + p.r);
+          bx1 = p.cx + p.r + 2; bx0 = bx1 - w - 5;
+        }
+        var box = { x0: bx0, x1: bx1,
                     y0: p.cy - p.r - 15, y1: p.cy - p.r - 1 };
-        var clash = box.x0 < V.x0 || box.x1 > V.x0 + V.w || box.y0 < V.top;
+        var clash = box.y0 < V.top;
         for (var q = 0; !clash && q < boxes.length; q++) {
           var b = boxes[q];
           clash = !(box.x1 < b.x0 || box.x0 > b.x1 ||

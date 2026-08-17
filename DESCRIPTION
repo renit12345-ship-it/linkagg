@@ -27,7 +27,9 @@ Suggests:
     shiny (>= 1.7.0),
     bslib (>= 0.5.0),
     testthat (>= 3.0.0),
-    htmltools
+    htmltools,
+    survival,
+    pharmaverseadam
 Config/testthat/edition: 3
 URL: https://github.com/renit12345-ship-it/linkagg
 BugReports: https://github.com/renit12345-ship-it/linkagg/issues

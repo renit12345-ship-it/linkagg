@@ -32,8 +32,43 @@ remotes::install_github("renit12345-ship-it/linkagg")
 ## Try it
 
 ```r
-source(system.file("examples/edish-demo.R", package = "linkagg"))
+source(system.file("examples/edish-demo.R", package = "linkagg"))   # simulated
+source(system.file("examples/pbc-trial.R",  package = "linkagg"))   # real trial
+source(system.file("examples/cdisc-adam.R", package = "linkagg"))   # real ADaM
 ```
+
+## On a real trial
+
+`pbc-trial.R` runs the figure on the Mayo Clinic primary biliary cholangitis
+trial: real patient data from a real randomised study of D-penicillamine
+against placebo, 1974 to 1984, 312 randomised patients, distributed in the
+`survival` package and described in Fleming and Harrington (1991).
+
+Two things come out of it that a static safety pack does not give you.
+
+**The volcano finds nothing, correctly.** No clinical finding separates the
+arms — the smallest p is 0.071 — which is what randomisation of baseline
+findings should look like. A display that manufactures a signal here would be
+worse than useless.
+
+**Brushing answers an overlap question.** Select the high-bilirubin,
+high-AST corner and each finding fills to the share of its own patients you
+just caught. For the region bilirubin >= 3 mg/dL and AST >= 100 U/L, 87 of 312
+patients:
+
+| finding      | patients | in the region | share | enrichment |
+|--------------|----------|---------------|-------|------------|
+| Ascites      | 24       | 14            | 58.3% | 2.09x      |
+| Oedema       | 49       | 26            | 53.1% | 1.90x      |
+| Spider naevi | 90       | 43            | 47.8% | 1.71x      |
+| Stage 4      | 109      | 47            | 43.1% | 1.55x      |
+| Hepatomegaly | 160      | 64            | 40.0% | 1.43x      |
+
+Ordered by clinical severity: the decompensation signs concentrate in the
+high-bilirubin patients, the least specific sign least. A frequency table
+gives you "24 patients had ascites" and "87 had bilirubin >= 3" as separate
+rows and cannot tell you that most of the ascites patients are the same
+people. That overlap is the thing this package exists to show.
 
 ## Use
 
