@@ -78,7 +78,8 @@ HTMLWidgets.widget({
     sf.append("feGaussianBlur").attr("stdDeviation", 2);
 
     var gZone = svg.append("g"), gAxis = svg.append("g"), gPts = svg.append("g"),
-        gHist = svg.append("g"), gArcs = svg.append("g").attr("pointer-events", "none"),
+        gHist = svg.append("g"), gVol = svg.append("g"),
+        gArcs = svg.append("g").attr("pointer-events", "none"),
         gBars = svg.append("g"), gTag = svg.append("g"), gBrush = svg.append("g");
 
     var statbar = root.append("div")
@@ -212,6 +213,25 @@ HTMLWidgets.widget({
       };
     }
 
+    // A volcano point is one term standing for many subjects, so it reduces to
+    // the same shape as a bar cell: a membership index plus a total. One
+    // "arm" only, because the two arms are already contrasted by the x axis.
+    function aggFromVolcano(vv) {
+      var rawMem = arr(vv.membership), mem = new Array(st.n), i;
+      for (i = 0; i < st.n; i++) mem[i] = Int32Array.from(arr(rawMem[i]));
+      var lv = arr(vv.levels);
+      return {
+        kind: "volcano", mem: mem,
+        armIndex: vv.armIndex ? Int32Array.from(arr(vv.armIndex)) : null,
+        levels: lv, nL: lv.length, nA: 1,
+        cells: Int32Array.from(arr(vv.cellTotals)),
+        denom: null, denominator: "count",
+        rd: arr(vv.riskDiff), p: arr(vv.pValue),
+        cRef: arr(vv.countRef), cComp: arr(vv.countComp),
+        hits: new Int32Array(lv.length)
+      };
+    }
+
     function recomputeHits(agg) {
       agg.hits.fill(0);
       if (!st.has) return;
@@ -274,9 +294,21 @@ HTMLWidgets.widget({
       st.H.top = scatterBottom + 18;
       var leftBottom = st.hv ? st.H.top + st.H.h + 34 : scatterBottom;
 
+      // The volcano goes in the left column under the scatter and histogram,
+      // not under the bars: a bar display grows with its level count, and
+      // stacking beneath it pushed the volcano off the bottom of tall figures.
+      var volBottom = 0;
+      if (st.vv) {
+        st.V = { x0: SC.l, w: SC.w, h: 206, top: leftBottom + 40 };
+        volBottom = st.V.top + st.V.h + 46;
+      } else {
+        st.V = null;
+      }
+
       // Let content drive the height. The floor is only a sanity bound: a hard
       // 500 left a dead band under figures that have no histogram.
-      st.VB.h = Math.max(360, Math.max(leftBottom, barsBottom) + 20);
+      st.VB.h = Math.max(360,
+        Math.max(leftBottom, Math.max(barsBottom, volBottom)) + 20);
       svg.attr("viewBox", "0 0 " + st.VB.w + " " + st.VB.h);
     }
 
@@ -697,11 +729,23 @@ HTMLWidgets.widget({
          (st.hv.byLevels ? " \u00b7 " + arr(st.hv.byLevels)[a] : ""));
       clearBrushes(); render(); pushShiny();
     }
+    function pickTerm(g) {
+      var agg = st.volAgg, mem = agg.mem, ai = agg.armIndex;
+      setMaskFromPredicate(function (i) {
+        if (ai && ai[i] < 0) return false;
+        var m = mem[i];
+        for (var j = 0; j < m.length; j++) if (m[j] === g) return true;
+        return false;
+      }, agg.levels[g]);
+      clearBrushes(); render(); pushShiny();
+    }
     function setDrill(g) {
       st.drillG = g;
       st.barAgg = aggFromBars(st.bv, g);
       computeLayout();
       drawBars();
+      // Drilling changes the bar count, so the volcano band below it moves.
+      drawVolcano();
       render();
     }
     function pushShiny() {
@@ -757,11 +801,22 @@ HTMLWidgets.widget({
       return pairs.length;
     }
 
+    // These transitions carry the value, not just the animation: a bar's width
+    // and a point's fill height are the data. requestAnimationFrame is
+    // suspended while a tab is hidden, and d3 timers with it, so a figure
+    // rendered in a background tab would sit at zero fill. Apply the value
+    // directly whenever motion is suppressed or cannot run.
+    function anim(sel, dur) {
+      if (!dur || document.hidden) return sel;
+      return sel.transition().duration(dur).ease(d3.easeCubicOut);
+    }
+
     // ---- render ----------------------------------------------------------
     function render() {
       var t0 = performance.now();
       if (st.barAgg)  recomputeHits(st.barAgg);
       if (st.histAgg) recomputeHits(st.histAgg);
+      if (st.volAgg)  recomputeHits(st.volAgg);
 
       if (st.useCanvas) paintCanvas();
       else if (st.ptSel) {
@@ -781,8 +836,8 @@ HTMLWidgets.widget({
           (function (row) {
             var hit = st.has ? st.barAgg.hits[row.g * st.barAgg.nA + row.a] : 0;
             var w = row.total > 0 && st.has ? (hit / row.total) * row.len : 0;
-            row.fill.transition().duration(dur).ease(d3.easeCubicOut).attr("width", w);
-            row.men.transition().duration(dur).ease(d3.easeCubicOut)
+            anim(row.fill, dur).attr("width", w);
+            anim(row.men, dur)
                 .attr("x1", st.B.x0 + w).attr("x2", st.B.x0 + w)
                 .attr("opacity", st.has && hit > 0 ? 0.9 : 0);
             row.lbl.text(cellText(st.barAgg, row.total, hit, row.a, st.has))
@@ -797,9 +852,24 @@ HTMLWidgets.widget({
             var hit = st.has ? st.histAgg.hits[hb.b * st.histAgg.nA + hb.a] : 0;
             var frac = hb.total > 0 && st.has ? hit / hb.total : 0;
             var hgt = frac * hb.fullH;
-            hb.fill.transition().duration(dur).ease(d3.easeCubicOut)
+            anim(hb.fill, dur)
                 .attr("y", hb.baseY - hgt).attr("height", hgt);
           })(st.hbars[b]);
+        }
+      }
+
+      if (st.volAgg && st.vpts) {
+        for (var v = 0; v < st.vpts.length; v++) {
+          (function (vp) {
+            var hit = st.has ? st.volAgg.hits[vp.t] : 0;
+            var frac = vp.total > 0 && st.has ? hit / vp.total : 0;
+            var hgt = frac * 2 * vp.r;
+            anim(vp.clip, dur)
+                .attr("y", vp.cy + vp.r - hgt).attr("height", hgt);
+            if (vp.lab) {
+              vp.lab.attr("fill", st.has && hit > 0 ? PAL.text : PAL.dim);
+            }
+          })(st.vpts[v]);
         }
       }
 
@@ -866,6 +936,168 @@ HTMLWidgets.widget({
       });
     }
 
+    // ---- volcano ---------------------------------------------------------
+    function drawVolcano() {
+      gVol.selectAll("*").remove();
+      st.vpts = [];
+      if (!st.vv || !st.volAgg || !st.V) return;
+      var vv = st.vv, agg = st.volAgg, V = st.V;
+      var nL = agg.nL, i;
+
+      // -log10(p), with a perfectly separated term clamped rather than sent
+      // to infinity.
+      var ylog = new Array(nL), maxY = 1;
+      for (i = 0; i < nL; i++) {
+        var p = agg.p[i];
+        var v = (p > 0) ? -Math.log10(p) : 6;
+        if (!isFinite(v)) v = 6;
+        ylog[i] = v;
+        if (v > maxY) maxY = v;
+      }
+      var maxAbs = 1;
+      for (i = 0; i < nL; i++) maxAbs = Math.max(maxAbs, Math.abs(agg.rd[i]));
+      maxAbs = maxAbs * 1.18;
+
+      var xs = d3.scaleLinear().domain([-maxAbs, maxAbs])
+                 .range([V.x0, V.x0 + V.w]);
+      var ys = d3.scaleLinear().domain([0, maxY * 1.15])
+                 .range([V.top + V.h, V.top]);
+      // Area, not radius, carries the subject count: a term seen in two
+      // subjects must not look as commanding as one seen in fifty.
+      var maxN = 1;
+      for (i = 0; i < nL; i++) maxN = Math.max(maxN, agg.cells[i]);
+      var rs = d3.scaleSqrt().domain([0, maxN]).range([2.4, 11]);
+
+      gTag.append("text").attr("x", V.x0).attr("y", V.top - 26)
+          .attr("fill", PAL.dim).style("font-size", "10px")
+          .style("letter-spacing", "0.07em")
+          .text("AGGREGATE — " + String(one(vv.label)).toUpperCase() +
+                " · RISK DIFFERENCE");
+      gVol.append("text").attr("x", V.x0).attr("y", V.top - 12)
+          .attr("fill", PAL.dim).style("font-size", "9.5px")
+          .text(String(one(vv.comp)) + " minus " + String(one(vv.ref)) +
+                " · n=" + one(vv.nComp) + " vs " + one(vv.nRef) +
+                (one(vv.dropped) > 0
+                   ? " · " + one(vv.dropped) + " term(s) below n=" +
+                     one(vv.minN) + " not shown" : ""));
+
+      // frame and guides
+      gVol.append("rect").attr("x", V.x0).attr("y", V.top)
+          .attr("width", V.w).attr("height", V.h)
+          .attr("fill", "none").attr("stroke", PAL.rule);
+      var x0line = xs(0);
+      gVol.append("line").attr("x1", x0line).attr("x2", x0line)
+          .attr("y1", V.top).attr("y2", V.top + V.h)
+          .attr("stroke", PAL.dim).attr("stroke-opacity", 0.5)
+          .attr("stroke-dasharray", "3 3");
+      var aLev = one(vv.alpha) || 0.05;
+      var yA = ys(-Math.log10(aLev));
+      if (yA > V.top && yA < V.top + V.h) {
+        gVol.append("line").attr("x1", V.x0).attr("x2", V.x0 + V.w)
+            .attr("y1", yA).attr("y2", yA)
+            .attr("stroke", PAL.zone).attr("stroke-opacity", 0.55)
+            .attr("stroke-dasharray", "4 4");
+        gVol.append("text").attr("x", V.x0 + V.w - 3).attr("y", yA - 4)
+            .attr("text-anchor", "end").attr("fill", PAL.zone)
+            .style("font-size", "9px").text("p = " + aLev);
+      }
+
+      xs.ticks(6).forEach(function (t) {
+        gVol.append("text").attr("x", xs(t)).attr("y", V.top + V.h + 13)
+            .attr("text-anchor", "middle").attr("fill", PAL.dim)
+            .style("font-size", "9px")
+            .text((t > 0 ? "+" : "") + d3.format("~g")(t));
+      });
+      ys.ticks(4).forEach(function (t) {
+        if (t === 0) return;
+        gVol.append("text").attr("x", V.x0 - 7).attr("y", ys(t) + 3)
+            .attr("text-anchor", "end").attr("fill", PAL.dim)
+            .style("font-size", "9px").text(d3.format("~g")(t));
+      });
+      gVol.append("text").attr("x", V.x0 + V.w / 2).attr("y", V.top + V.h + 30)
+          .attr("text-anchor", "middle").attr("fill", PAL.dim)
+          .style("font-size", "9.5px")
+          .text("RISK DIFFERENCE (PERCENTAGE POINTS)");
+      gVol.append("text")
+          .attr("transform", "translate(" + (V.x0 - 32) + "," +
+                (V.top + V.h / 2) + ") rotate(-90)")
+          .attr("text-anchor", "middle").attr("fill", PAL.dim)
+          .style("font-size", "9.5px").text("-LOG10(P)");
+
+      for (i = 0; i < nL; i++) {
+        (function (t) {
+          var cx = xs(agg.rd[t]), cy = ys(ylog[t]), r = rs(agg.cells[t]);
+          var g = gVol.append("g");
+
+          g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", r)
+              .attr("fill", PAL.data).attr("fill-opacity", 0.16)
+              .attr("stroke", PAL.data).attr("stroke-opacity", 0.55);
+
+          // The selected share fills the disc from the bottom up.
+          var cid = "lkv-" + el.id + "-" + t;
+          var clip = defs.append("clipPath").attr("id", cid).append("rect")
+              .attr("x", cx - r - 1).attr("y", cy + r)
+              .attr("width", 2 * r + 2).attr("height", 0);
+          var fill = g.append("circle").attr("cx", cx).attr("cy", cy)
+              .attr("r", r).attr("fill", PAL.select)
+              .attr("clip-path", "url(#" + cid + ")");
+
+          var hit = g.append("circle").attr("cx", cx).attr("cy", cy)
+              .attr("r", Math.max(r, 7)).attr("fill", "transparent")
+              .style("cursor", "pointer").attr("tabindex", 0)
+              .attr("role", "button")
+              .attr("aria-label", "Select " + agg.cells[t] + " subjects with " +
+                    agg.levels[t])
+              .on("click", function () { pickTerm(t); })
+              .on("keydown", function (ev) {
+                if (ev.key === "Enter" || ev.key === " ") {
+                  ev.preventDefault(); pickTerm(t);
+                }
+              });
+          hit.append("title").text(
+            agg.levels[t] + "\n" +
+            one(vv.comp) + ": " + agg.cComp[t] + "/" + one(vv.nComp) + "\n" +
+            one(vv.ref) + ": " + agg.cRef[t] + "/" + one(vv.nRef) + "\n" +
+            "risk difference: " + d3.format("+.1f")(agg.rd[t]) + " pts\n" +
+            "p = " + d3.format(".3g")(agg.p[t]));
+
+          st.vpts.push({ t: t, cx: cx, cy: cy, r: r, clip: clip,
+                         fill: fill, lab: null, total: agg.cells[t] });
+        })(i);
+      }
+
+      // Label the terms that separate the arms most sharply, in a second pass
+      // so a label can be skipped when its box would collide with one already
+      // placed or run outside the panel. Overlapping labels on a volcano are
+      // worse than absent ones: they misattribute a term to a neighbouring
+      // point.
+      var byIx = {};
+      st.vpts.forEach(function (p) { byIx[p.t] = p; });
+      var order = d3.range(nL).sort(function (a, b) { return ylog[b] - ylog[a]; });
+      var boxes = [];
+      order.slice(0, 8).forEach(function (t) {
+        var p = byIx[t];
+        if (!p) return;
+        var txt = gVol.append("text").attr("x", p.cx).attr("y", p.cy - p.r - 5)
+            .attr("text-anchor", "middle").attr("fill", PAL.dim)
+            .style("font-size", "9px").text(agg.levels[t]);
+        var w;
+        try { w = txt.node().getComputedTextLength(); } catch (e) { w = 0; }
+        if (!w) w = String(agg.levels[t]).length * 5;
+        var box = { x0: p.cx - w / 2 - 3, x1: p.cx + w / 2 + 3,
+                    y0: p.cy - p.r - 15, y1: p.cy - p.r - 1 };
+        var clash = box.x0 < V.x0 || box.x1 > V.x0 + V.w || box.y0 < V.top;
+        for (var q = 0; !clash && q < boxes.length; q++) {
+          var b = boxes[q];
+          clash = !(box.x1 < b.x0 || box.x0 > b.x1 ||
+                    box.y1 < b.y0 || box.y0 > b.y1);
+        }
+        if (clash) { txt.remove(); return; }
+        boxes.push(box);
+        p.lab = txt;
+      });
+    }
+
     function drawTable() {
       tableWrap.selectAll("*").remove();
       if (!st.tv) { tableWrap.style("display", "none"); return; }
@@ -910,6 +1142,7 @@ HTMLWidgets.widget({
         st.bv = views.filter(function (v) { return v.type === "bars"; })[0] || null;
         st.hv = views.filter(function (v) { return v.type === "hist"; })[0] || null;
         st.tv = views.filter(function (v) { return v.type === "table"; })[0] || null;
+        st.vv = views.filter(function (v) { return v.type === "volcano"; })[0] || null;
 
         st.facets = (st.pv && st.pv.facetLevels) ? {
           col: one(st.pv.facet),
@@ -921,6 +1154,7 @@ HTMLWidgets.widget({
 
         st.barAgg  = st.bv ? aggFromBars(st.bv, null) : null;
         st.histAgg = st.hv ? aggFromHist(st.hv) : null;
+        st.volAgg  = st.vv ? aggFromVolcano(st.vv) : null;
 
         var mode = one(opt.pointRenderer) || "auto";
         var thr = one(opt.canvasThreshold) || 6000;
@@ -931,6 +1165,7 @@ HTMLWidgets.widget({
         drawScatterFrame();
         drawBars();
         drawHist();
+        drawVolcano();
         drawTable();
         installBrushes();
 

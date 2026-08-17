@@ -362,3 +362,82 @@ test_that("view_hist() validates its inputs", {
   expect_error(linkagg(df, id) |> view_hist(v, denominator = "population"),
                "needs `by`")
 })
+
+# ---- volcano ---------------------------------------------------------------
+
+vol_df <- function() {
+  # 4 on placebo, 4 on active. "Nausea" hits 1 placebo and 3 active.
+  df <- data.frame(
+    id  = sprintf("v%d", 1:8),
+    arm = rep(c("Placebo", "Active"), each = 4),
+    stringsAsFactors = FALSE
+  )
+  df$PT <- list(
+    "Nausea", character(0), "Rash", character(0),
+    c("Nausea", "Rash"), "Nausea", "Nausea", character(0)
+  )
+  df
+}
+
+test_that("view_volcano() computes the risk difference against the reference", {
+  v <- (linkagg(vol_df(), id) |>
+          view_volcano(PT, by = arm, ref = "Placebo", comp = "Active",
+                       min_n = 1L))$views[[1]]
+
+  i <- match("Nausea", v$levels)
+  expect_equal(v$countRef[i], 1L)          # 1 of 4 placebo
+  expect_equal(v$countComp[i], 3L)         # 3 of 4 active
+  expect_equal(v$nRef, 4L)
+  expect_equal(v$nComp, 4L)
+  expect_equal(v$riskDiff[i], 50)          # 75% - 25%, in percentage points
+
+  # Sign follows the comparison arm: Rash is 1 active vs 1 placebo, so zero.
+  j <- match("Rash", v$levels)
+  expect_equal(v$riskDiff[j], 0)
+
+  # p-value agrees with a direct Fisher test on the same table.
+  expect_equal(v$pValue[i],
+               stats::fisher.test(matrix(c(3, 1, 1, 3), nrow = 2))$p.value)
+})
+
+test_that("view_volcano() counts each subject once per term", {
+  v <- (linkagg(vol_df(), id) |>
+          view_volcano(PT, by = arm, min_n = 1L))$views[[1]]
+  # cellTotals is subjects, not events, so it can never exceed the two arms.
+  expect_true(all(v$cellTotals <= v$nRef + v$nComp))
+  expect_equal(v$cellTotals[match("Nausea", v$levels)], 4L)   # 1 + 3
+  # Membership indices stay inside the kept terms.
+  expect_true(all(unlist(v$membership) < length(v$levels)))
+  expect_true(all(unlist(v$membership) >= 0))
+})
+
+test_that("view_volcano() excludes arms outside the comparison", {
+  df <- vol_df()
+  df$arm[1:2] <- "Other"        # these two must take no part
+  v <- (linkagg(df, id) |>
+          view_volcano(PT, by = arm, ref = "Placebo", comp = "Active",
+                       min_n = 1L))$views[[1]]
+  expect_equal(v$nRef, 2L)
+  expect_equal(v$armIndex[1:2], c(-1L, -1L))
+  expect_length(v$membership[[1]], 0L)
+})
+
+test_that("view_volcano() reports rather than hides sparse terms", {
+  v <- (linkagg(vol_df(), id) |>
+          view_volcano(PT, by = arm, min_n = 4L))$views[[1]]
+  expect_equal(v$dropped, 1L)            # Rash has 2 subjects, below 4
+  expect_false("Rash" %in% v$levels)
+  expect_true("Nausea" %in% v$levels)
+})
+
+test_that("view_volcano() validates its arms", {
+  d <- vol_df()
+  expect_error(linkagg(d, id) |> view_volcano(PT, by = arm, ref = "Nope"),
+               "Arm not found")
+  expect_error(
+    linkagg(d, id) |> view_volcano(PT, by = arm, ref = "Active", comp = "Active"),
+    "must be different"
+  )
+  expect_error(linkagg(d, id) |> view_volcano(PT, by = arm, min_n = 99L),
+               "No term reaches")
+})

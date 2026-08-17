@@ -441,6 +441,144 @@ view_table <- function(spec, cols = NULL, labels = NULL, max_rows = 400L) {
   spec
 }
 
+#' Add a linked volcano plot of adverse event terms
+#'
+#' One point per term, positioned by how much the two arms differ. The x axis
+#' is the risk difference, the comparison arm's incidence minus the reference
+#' arm's, in percentage points. The y axis is `-log10(p)` from Fisher's exact
+#' test on that term's two-by-two table. Terms far right are more frequent on
+#' the comparison arm, terms high up separate the arms most sharply.
+#'
+#' Each point stands for many subjects, so it is an aggregate mark in the sense
+#' this package is built around: with a selection active every point fills from
+#' the bottom in proportion to the share of its own subjects selected. Brushing
+#' the liver corner of an eDISH plot and reading the volcano therefore answers a
+#' question a static safety pack cannot: which adverse event signals are
+#' actually carried by those subjects.
+#'
+#' Point area is proportional to the number of subjects contributing to the
+#' term. A volcano plot shows an effect estimate without showing its precision,
+#' which is its recognised weakness: a term seen in two subjects can sit as far
+#' out as one seen in fifty. Sizing by subject count keeps that visible, and
+#' `min_n` drops the sparsest terms while reporting how many were dropped
+#' rather than passing over them silently.
+#'
+#' @param spec A `linkagg_spec`.
+#' @param group Term column, such as preferred term. Either one value per row
+#'   or a list-column, as in [view_bars()].
+#' @param by Treatment arm column.
+#' @param ref,comp Reference and comparison arm. Default to the first and last
+#'   levels of `by`. Subjects on any other arm take no part in the comparison.
+#' @param min_n Drop terms with fewer than this many subjects across the two
+#'   arms. The count dropped is shown on the display.
+#' @param alpha Significance level for the reference line. Drawn as a guide to
+#'   the eye, with no multiplicity adjustment implied.
+#' @param label Display title. Defaults to the column name.
+#'
+#' @return The updated `linkagg_spec`.
+#' @export
+view_volcano <- function(spec, group, by, ref = NULL, comp = NULL,
+                         min_n = 2L, alpha = 0.05, label = NULL) {
+  group <- col_name(substitute(group), parent.frame())
+  by    <- col_name(substitute(by), parent.frame())
+  check_spec(spec)
+  check_cols(spec, c(group, by))
+
+  arm <- as.character(spec$data[[by]])
+  lv  <- if (is.factor(spec$data[[by]])) levels(spec$data[[by]]) else
+           sort(unique(arm))
+  lv  <- as.character(lv)
+  if (length(lv) < 2L) {
+    stop("`by` needs at least two arms to compare.", call. = FALSE)
+  }
+  ref  <- as.character(ref  %||% lv[1])
+  comp <- as.character(comp %||% lv[length(lv)])
+  for (nm in c(ref, comp)) {
+    if (!nm %in% lv) {
+      stop("Arm not found in `", by, "`: ", nm, ". Available: ",
+           paste(lv, collapse = ", "), call. = FALSE)
+    }
+  }
+  if (identical(ref, comp)) {
+    stop("`ref` and `comp` must be different arms.", call. = FALSE)
+  }
+
+  in_ref  <- !is.na(arm) & arm == ref
+  in_comp <- !is.na(arm) & arm == comp
+  n_ref   <- sum(in_ref)
+  n_comp  <- sum(in_comp)
+  if (!n_ref || !n_comp) {
+    stop("Both arms need subjects: ", ref, " has ", n_ref, ", ",
+         comp, " has ", n_comp, ".", call. = FALSE)
+  }
+
+  col <- spec$data[[group]]
+  vals <- if (is.list(col)) {
+    lapply(col, function(v) unique(as.character(v[!is.na(v)])))
+  } else {
+    lapply(as.character(col), function(v) if (is.na(v)) character(0) else v)
+  }
+  # Only the two arms being compared take part.
+  keep <- in_ref | in_comp
+  vals[!keep] <- list(character(0))
+
+  all_terms <- sort(unique(unlist(vals, use.names = FALSE)))
+  if (!length(all_terms)) {
+    stop("`group` has no non-missing values in the two arms compared.",
+         call. = FALSE)
+  }
+
+  has_term <- function(t) vapply(vals, function(v) t %in% v, logical(1))
+  stat <- lapply(all_terms, function(t) {
+    hit <- has_term(t)
+    a <- sum(hit & in_comp)          # comparison arm, with the term
+    b <- sum(hit & in_ref)           # reference arm, with the term
+    tab <- matrix(c(a, n_comp - a, b, n_ref - b), nrow = 2)
+    p <- tryCatch(stats::fisher.test(tab)$p.value, error = function(e) NA_real_)
+    list(term = t, a = a, b = b, n = a + b,
+         rd = (a / n_comp - b / n_ref) * 100,
+         p = p)
+  })
+
+  n_all   <- vapply(stat, function(s) s$n, numeric(1))
+  min_n   <- as.integer(min_n)
+  keep_t  <- n_all >= min_n
+  dropped <- sum(!keep_t)
+  if (!any(keep_t)) {
+    stop("No term reaches `min_n` = ", min_n, ".", call. = FALSE)
+  }
+  stat  <- stat[keep_t]
+  terms <- vapply(stat, function(s) s$term, character(1))
+
+  membership <- lapply(vals, function(v) {
+    ix <- match(v, terms)
+    as.integer(ix[!is.na(ix)] - 1L)
+  })
+
+  # p can be 1 exactly, and -log10(0) is infinite for a perfectly separated
+  # term; both are clamped on the display rather than dropped.
+  pv <- vapply(stat, function(s) s$p, numeric(1))
+  pv[is.na(pv)] <- 1
+
+  spec$views <- c(spec$views, list(list(
+    type = "volcano", group = group, by = by,
+    ref = ref, comp = comp,
+    levels = terms,
+    membership = unname(membership),
+    armIndex = as.integer(ifelse(keep, 0L, -1L)),
+    cellTotals = as.integer(vapply(stat, function(s) s$n, numeric(1))),
+    nRef = as.integer(n_ref), nComp = as.integer(n_comp),
+    countRef  = as.integer(vapply(stat, function(s) s$b, numeric(1))),
+    countComp = as.integer(vapply(stat, function(s) s$a, numeric(1))),
+    riskDiff = as.numeric(vapply(stat, function(s) s$rd, numeric(1))),
+    pValue = as.numeric(pv),
+    alpha = as.numeric(alpha),
+    dropped = as.integer(dropped), minN = min_n,
+    label = label %||% group
+  )))
+  spec
+}
+
 #' Add a linked histogram
 #'
 #' Bins a continuous column and draws it as an aggregate display. This is the

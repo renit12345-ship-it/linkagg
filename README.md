@@ -161,6 +161,33 @@ view_hist(ALT, bins = 30, by = ARM, log = TRUE)
 Log binning drops non-positive values, warns with the count, and reports the
 number of unbinned rows on the display rather than passing over them.
 
+## Volcano plot
+
+```r
+view_volcano(PT, by = ARM, ref = "Placebo", comp = "Drug A", min_n = 5)
+```
+
+One point per term, placed by risk difference (comparison minus reference, in
+percentage points) against `-log10(p)` from Fisher's exact test. Volcano and
+dot plots are the two displays content experts favour for summarising harms in
+a trial, so this is the shape a safety reviewer already reads.
+
+Each point stands for many subjects, which makes it an aggregate mark in the
+sense this package exists for: with a selection active every point fills from
+the bottom in proportion to the share of *its own* subjects selected. Brushing
+the Hy's law corner of an eDISH plot and reading the volcano answers a question
+no static safety pack contains — which adverse event signals those subjects
+actually carry. In the bundled example, brushing 15 subjects from that corner
+fills the four liver terms to 17–29% and every background term to under 6%.
+
+The recognised weakness of a volcano is that it shows an effect estimate
+without its precision: a term seen in two subjects can sit as far from the
+origin as one seen in fifty. Two things guard against that here. Point area is
+proportional to the number of subjects contributing, so sparse terms look
+sparse; and `min_n` drops the thinnest terms while printing how many were
+dropped on the display rather than passing over them silently. The `p = 0.05`
+line is a guide to the eye with no multiplicity adjustment implied.
+
 ## Performance
 
 Selection is a `Uint8Array` mask plus an `Int32Array` of selected indices, not a
