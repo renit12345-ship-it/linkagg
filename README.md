@@ -14,7 +14,7 @@ Output is an htmlwidget. It works inside Shiny, and it saves to a single
 self-contained HTML file with no server, so an interactive figure can be
 emailed, archived, and opened offline in five years like a static one.
 
-![Hovering a point for its subject id, brushing the liver corner so the bars fill, then drilling from organ class to preferred term](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-figure.gif)
+![Hovering a point for its subject id, brushing the liver corner so the bars fill, then drilling from organ class to preferred term](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-figure.gif?v=340b6302)
 
 *Real CDISC pilot data, recorded from the figure itself.*
 
@@ -78,7 +78,7 @@ directions. Run it with one call:
 linkagg::run_linkagg_app()
 ```
 
-![Changing the grid variable rebuilds the figure, then brushing one cell updates the cards and crosstab computed in R](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-app.gif)
+![Changing the grid variable rebuilds the figure, then brushing one cell updates the cards and crosstab computed in R](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-app.gif?v=6c96a626)
 
 **Shiny drives the figure.** The sidebar chooses the grid variables, the bar
 denominator and whether threads are drawn, and the figure is rebuilt server
