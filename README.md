@@ -18,10 +18,12 @@ emailed, archived, and opened offline in five years like a static one.
 
 *Real CDISC pilot data, recorded from the figure itself.*
 
-*Hover a mark and it names the subject. Then drag, and keep dragging: the bars,
-the counts and the listing underneath all track the box while it moves, so you
-can sweep a region and watch which organ classes respond rather than guess,
-release, and guess again. Click a bar rather than its label and the traffic
+*Hover a mark and it names the subject. Drag out a box and then take hold of
+it: the box stays live, so you can slide it around the plot and the bars, the
+counts and the listing underneath all follow it while it moves. That is what
+makes it exploratory rather than a query, since you can sweep a region and
+watch which organ classes respond instead of guessing, releasing, looking, and
+guessing again. Click a bar rather than its label and the traffic
 runs the other way, that bar's own subjects lighting up in the scatter and
 becoming the listing. Click a bar's label instead and it walks down the MedDRA
 hierarchy, organ class to preferred term to the term the investigator wrote,
@@ -334,14 +336,13 @@ and the redraw the browser reports after a brush.
 A million subjects redraw in about a tenth of a second, so drawing is no
 longer what limits the size of a figure.
 
-A brush resolves while it is still being dragged, coalesced to one update per
-animation frame, and the cost of each of those updates is the size of the
+A brush resolves while it is still being dragged, and equally while an existing
+box is being moved or resized, coalesced to one update per animation frame, and the cost of each of those updates is the size of the
 selection rather than of the dataset. On a million subjects, sweeping out a
 corner holding seventeen thousand of them updates in around 3 ms per frame.
 Dragging until nearly the whole cohort is inside the box reaches about 180 ms,
-which is the worst case and an odd thing to want. Threads and the listing's
-rows are drawn once the brush is released rather than on every frame, since
-both are expensive and read as noise mid-drag.
+which is the worst case and an odd thing to want. Only the threads wait for the release,
+being the one part whose cost is not bounded by the listing's row cap.
 
 What limits it now is the file. The row-level data travels inside the HTML, at
 roughly 60 MB per million subjects, so a million-subject figure is a 61 MB

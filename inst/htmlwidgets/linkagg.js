@@ -1091,11 +1091,13 @@ HTMLWidgets.widget({
     }
 
     // ---- render ----------------------------------------------------------
-    // `live` is set while a brush is still being dragged. It updates
-    // everything the eye is actually tracking, the marks, the bar fills and
-    // the counts, and defers the two things that are expensive and read as
-    // noise mid-drag: the threads and rebuilding the listing's rows. Both are
-    // drawn once the brush is released.
+    // `live` is set while a brush is still being dragged. Everything the eye
+    // tracks updates, the marks, the bar fills, the counts and the listing.
+    // Only the threads are deferred to the release: they are the one part
+    // whose cost is not bounded by the listing's row cap, and a hundred
+    // animated arcs redrawn per frame read as noise rather than as feedback.
+    // The listing is bounded by `max_rows`, so it stays live; leaving it
+    // stale showed a row count that disagreed with the rows underneath it.
     function render(live) {
       var t0 = performance.now();
       if (st.barAgg)  recomputeHits(st.barAgg);
@@ -1164,12 +1166,6 @@ HTMLWidgets.widget({
         var tv = st.tv, cap = one(tv.maxRows) || 400, cols = arr(tv.cols);
         var shown = st.has ? st.selCount : st.n;
         var html = "", cnt = 0;
-        if (live) {
-          st.tableNote.text(st.has
-            ? fmtN(shown) + " rows selected" +
-              (shown > cap ? ", first " + fmtN(cap) + " shown" : "")
-            : "All " + fmtN(st.n) + " rows");
-        } else {
         for (var i = 0; i < st.n && cnt < cap; i++) {
           if (st.has && i >= st.selCount) break;
           var ix = st.has ? st.selIdx[i] : i;
@@ -1187,7 +1183,6 @@ HTMLWidgets.widget({
           ? fmtN(shown) + " rows selected" +
             (shown > cap ? ", first " + fmtN(cap) + " shown" : "")
           : "All " + fmtN(st.n) + " rows");
-        }
       }
 
       vSel.text(fmtN(st.has ? st.selCount : st.n) + " / " + fmtN(st.n))
