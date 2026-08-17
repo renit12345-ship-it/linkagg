@@ -2,51 +2,51 @@
 #
 # Real patient data from a real randomised trial: D-penicillamine against
 # placebo, 1974 to 1984, 312 randomised patients, distributed in the survival
-# package as `pbc` and described in Fleming and Harrington (1991). The trial
+# package as `pbc_raw` and described in Fleming and Harrington (1991). The trial
 # found no benefit from D-penicillamine.
 #
 # Note what the aggregate groups are here. This is not an adverse event
-# dataset, so the bars are baseline clinical findings rather than treated-
+# dataset, so the bars are baseline clinical pbc_findings rather than treated-
 # emergent events. The mechanic is the same, each bar stands for many
 # patients, but read the clinical content accordingly.
 #
-# Run it with:  source(system.file("examples/pbc-trial.R", package = "linkagg"))
+# Run it with:  source(system.file("examples/pbc_raw-trial.R", package = "linkagg"))
 
 if (!"package:linkagg" %in% search()) library(linkagg)
 if (!requireNamespace("survival", quietly = TRUE)) {
   stop("This example needs survival: install.packages(\"survival\")")
 }
 
-pbc <- survival::pbc
-d <- pbc[!is.na(pbc$trt), ]          # randomised patients only
+pbc_raw <- survival::pbc
+pbc_pat <- pbc_raw[!is.na(pbc_raw$trt), ]          # randomised patients only
 
-d$ARM <- factor(ifelse(d$trt == 1, "D-penicillamine", "Placebo"),
+pbc_pat$ARM <- factor(ifelse(pbc_pat$trt == 1, "D-penicillamine", "Placebo"),
                 levels = c("Placebo", "D-penicillamine"))
-d$SEX <- factor(ifelse(d$sex == "f", "Female", "Male"),
+pbc_pat$SEX <- factor(ifelse(pbc_pat$sex == "f", "Female", "Male"),
                 levels = c("Female", "Male"))
-d$STAGE <- factor(paste("Stage", d$stage), levels = paste("Stage", 1:4))
-d$PATIENT <- sprintf("PBC-%03d", d$id)
+pbc_pat$STAGE <- factor(paste("Stage", pbc_pat$stage), levels = paste("Stage", 1:4))
+pbc_pat$PATIENT <- sprintf("PBC-%03d", pbc_pat$id)
 
-# One list-column of the clinical findings present in each patient, which is
+# One list-column of the clinical pbc_findings present in each patient, which is
 # the shape view_bars() and view_volcano() consume. Oedema is graded 0, 0.5
 # and 1 in this dataset; anything above zero counts as present.
-findings <- data.frame(
-  Ascites       = d$ascites == 1,
-  Hepatomegaly  = d$hepato == 1,
-  `Spider naevi` = d$spiders == 1,
-  Oedema        = d$edema > 0,
-  `Stage 4 disease` = d$stage == 4,
+pbc_findings <- data.frame(
+  Ascites       = pbc_pat$ascites == 1,
+  Hepatomegaly  = pbc_pat$hepato == 1,
+  `Spider naevi` = pbc_pat$spiders == 1,
+  Oedema        = pbc_pat$edema > 0,
+  `Stage 4 disease` = pbc_pat$stage == 4,
   check.names = FALSE
 )
-d$FINDING <- lapply(seq_len(nrow(d)), function(i) {
-  nm <- names(findings)[which(unlist(findings[i, ]))]
+pbc_pat$FINDING <- lapply(seq_len(nrow(pbc_pat)), function(i) {
+  nm <- names(pbc_findings)[which(unlist(pbc_findings[i, ]))]
   if (length(nm)) nm else character(0)
 })
 
-cat(sprintf("%d randomised patients: %s\n", nrow(d),
-            paste(sprintf("%s %d", levels(d$ARM), table(d$ARM)), collapse = ", ")))
+cat(sprintf("%d randomised patients: %s\n", nrow(pbc_pat),
+            paste(sprintf("%s %d", levels(pbc_pat$ARM), table(pbc_pat$ARM)), collapse = ", ")))
 
-fig <- linkagg(d, PATIENT) |>
+fig <- linkagg(pbc_pat, PATIENT) |>
   view_points(bili, ast, log_x = TRUE, log_y = TRUE,
               x_lab = "Serum bilirubin (mg/dL)",
               y_lab = "AST (U/L)",

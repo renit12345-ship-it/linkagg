@@ -74,12 +74,17 @@ people. That overlap is the thing this package exists to show.
 
 ## Use
 
+This sketch uses your own data. For something that runs as it stands, source
+one of the examples above; each leaves its data frame and the figure behind
+under its own names (`demo_adsl`, `cdisc_saf`, `pbc_pat`, and `fig`).
+
 ```r
 library(linkagg)
 
-# adsl is one row per subject, restricted to the safety population.
-# adsl$SOC is a list-column: each element is that subject's system organ
-# classes, so a subject with events in three SOCs contributes to three bars.
+# adsl is your own subject-level data, one row per subject, restricted to the
+# safety population. adsl$SOC is a list-column: each element is that subject's
+# system organ classes, so a subject with events in three SOCs contributes to
+# three bars.
 
 fig <- linkagg(adsl, USUBJID) |>
   view_points(TBILI, ALT,
