@@ -103,6 +103,36 @@ view_points(TBILI, ALT, log_x = TRUE, log_y = TRUE, facet = ARM)
 Rows whose facet value is outside `facet_levels` are marked rather than
 silently dropped, so a typo in a level name does not quietly remove subjects.
 
+Add `facet_row` for a full grid: one column per level of `facet`, one row per
+level of `facet_row`.
+
+```r
+view_points(TBILI, ALT, log_x = TRUE, log_y = TRUE,
+            facet = ARM, facet_row = SEX)
+```
+
+Scales stay shared across the whole grid, so every panel is comparable with
+every other, and a brush still selects only the cell you dragged over: the
+subjects in that arm *and* that sex. Internally a panel is one index,
+`row * n_columns + column`, so the grid reuses the same selection path as a
+single strip of panels rather than introducing a second one.
+
+## Choosing columns at runtime
+
+The view functions take a bare column name, a string, or any expression that
+evaluates to a string. The last form is what makes them usable from Shiny,
+where the column is chosen by the user:
+
+```r
+view_points(spec, TBILI, ALT, facet = input$fcol, facet_row = input$frow)
+```
+
+An expression evaluating to `NULL` means "no column", so an optional facet or
+arm can be switched off without building a different call. A **bare name is
+always taken literally**, so a variable that happens to share a column's name
+can never silently redirect a reference. Wrap it in parentheses when you do
+want the variable's value: `by = (arm_col)`.
+
 ## Drill-down
 
 `drill` gives a second level below the grouping, such as preferred term below
@@ -177,11 +207,17 @@ server <- function(input, output) {
 The current selection arrives as `input$<outputId>_selected`, a character
 vector of key values, or `NULL` when nothing is selected.
 
-For a working app that reads the selection back and summarises it in R:
+The bundled demo app shows both directions at once:
 
 ```r
 linkagg::run_linkagg_app()
 ```
+
+Shiny drives the figure: sidebar controls pick the grid variables, the bar
+denominator and whether threads are drawn, and the figure is rebuilt
+server-side. The figure drives Shiny: the brushed selection feeds the summary
+cards, an arm-by-sex crosstab and a CSV download, all computed in R from
+`input$fig_selected`.
 
 One gotcha: `linkaggOutput(height = )` does not resize the figure, it only
 sizes the container. If the figure is taller than the container it overlaps

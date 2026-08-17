@@ -3,10 +3,20 @@
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
-# Accept either a bare column name or a character string.
-col_name <- function(q) {
+# Accept a bare column name, a character string, or any expression that
+# evaluates to one. The last case is what makes the views usable from Shiny,
+# where the column is chosen at runtime and arrives as `input$something`.
+# A bare name is still taken literally, so a stray variable of the same name
+# cannot silently redirect a column reference.
+col_name <- function(q, env = parent.frame()) {
+  if (is.null(q))      return(NULL)
   if (is.character(q)) return(as.character(q))
   if (is.name(q))      return(as.character(q))
+  val <- tryCatch(eval(q, env), error = function(e) NULL)
+  # An expression that evaluates to NULL means "no column", which is how an
+  # optional facet or arm is switched off from calling code.
+  if (is.null(val)) return(NULL)
+  if (is.character(val) && length(val) == 1L && !is.na(val)) return(val)
   deparse(q)
 }
 
@@ -74,7 +84,7 @@ check_cols <- function(spec, cols) {
 linkagg <- function(data, key, threads = TRUE, thread_cap = 160L,
                     points = c("auto", "svg", "canvas"),
                     canvas_threshold = 6000L, palette = NULL) {
-  key <- col_name(substitute(key))
+  key <- col_name(substitute(key), parent.frame())
   points <- match.arg(points)
   if (!is.data.frame(data)) stop("`data` must be a data frame.", call. = FALSE)
   if (!nrow(data))          stop("`data` has no rows.", call. = FALSE)
@@ -119,19 +129,36 @@ linkagg <- function(data, key, threads = TRUE, thread_cap = 160L,
 #'
 #' @param facet Optional column giving one small multiple per level, drawn on
 #'   shared scales so panels are comparable. Brushing acts within one panel.
-#' @param facet_levels Optional character vector fixing panel order.
+#'   With `facet_row` also set, this becomes the column variable of a grid.
+#' @param facet_row Optional second column, laid out down the rows to give a
+#'   full grid of panels: one column per level of `facet`, one row per level
+#'   of `facet_row`, such as arm across and sex down. Scales stay shared across
+#'   the whole grid, so every panel is comparable with every other, and a brush
+#'   still selects only the rows in the one cell you dragged over.
+#' @param facet_levels,facet_row_levels Optional character vectors fixing the
+#'   order of columns and of rows.
 #' @return The updated `linkagg_spec`.
 #' @export
 view_points <- function(spec, x, y, log_x = FALSE, log_y = FALSE,
                         x_lab = NULL, y_lab = NULL, zone = NULL,
-                        facet = NULL, facet_levels = NULL) {
-  x <- col_name(substitute(x))
-  y <- col_name(substitute(y))
+                        facet = NULL, facet_levels = NULL,
+                        facet_row = NULL, facet_row_levels = NULL) {
+  x <- col_name(substitute(x), parent.frame())
+  y <- col_name(substitute(y), parent.frame())
   facet_q <- substitute(facet)
-  facet <- if (is.null(facet_q)) NULL else col_name(facet_q)
+  facet <- if (is.null(facet_q)) NULL else col_name(facet_q, parent.frame())
+  frow_q <- substitute(facet_row)
+  facet_row <- if (is.null(frow_q)) NULL else col_name(frow_q, parent.frame())
   check_spec(spec)
   check_cols(spec, c(x, y))
   if (!is.null(facet)) check_cols(spec, facet)
+  if (!is.null(facet_row)) {
+    check_cols(spec, facet_row)
+    if (is.null(facet)) {
+      stop("`facet_row` needs `facet` as well: a grid needs both a column ",
+           "variable and a row variable.", call. = FALSE)
+    }
+  }
 
   for (nm in c(x, y)) {
     if (!is.numeric(spec$data[[nm]])) {
@@ -142,16 +169,28 @@ view_points <- function(spec, x, y, log_x = FALSE, log_y = FALSE,
     stop("`zone` must be a list with elements `x` and `y`.", call. = FALSE)
   }
 
-  flv <- NULL; fix <- NULL
+  flv <- NULL; fix <- NULL; rlv <- NULL
   if (!is.null(facet)) {
-    fcol <- spec$data[[facet]]
-    flv <- facet_levels %||%
-      (if (is.factor(fcol)) levels(fcol) else sort(unique(as.character(fcol))))
-    flv <- as.character(flv)
-    fix <- match(as.character(fcol), flv) - 1L
-    fix <- as.integer(ifelse(is.na(fix), -1L, fix))
+    fa <- facet_axis(spec$data[[facet]], facet_levels)
+    flv <- fa$levels
+    fix <- fa$index
     if (all(fix < 0)) stop("No values of `", facet, "` matched `facet_levels`.",
                            call. = FALSE)
+
+    if (!is.null(facet_row)) {
+      ra <- facet_axis(spec$data[[facet_row]], facet_row_levels)
+      rlv <- ra$levels
+      if (all(ra$index < 0)) {
+        stop("No values of `", facet_row, "` matched `facet_row_levels`.",
+             call. = FALSE)
+      }
+      # One panel per (row, column) cell, numbered row-major. The drawing and
+      # brushing code already keys on a single panel index, so a grid needs no
+      # separate code path: cell = row * n_columns + column.
+      nC <- length(flv)
+      fix <- ifelse(fix < 0L | ra$index < 0L, -1L, ra$index * nC + fix)
+      fix <- as.integer(fix)
+    }
   }
 
   spec$views <- c(spec$views, list(list(
@@ -159,9 +198,19 @@ view_points <- function(spec, x, y, log_x = FALSE, log_y = FALSE,
     xlog = isTRUE(log_x), ylog = isTRUE(log_y),
     xlab = x_lab %||% x, ylab = y_lab %||% y,
     zone = zone,
-    facet = facet, facetLevels = flv, facetIndex = fix
+    facet = facet, facetLevels = flv, facetIndex = fix,
+    facetRow = facet_row, facetRowLevels = rlv
   )))
   spec
+}
+
+# Levels for a facetting column, and each row's zero-based position in them.
+facet_axis <- function(col, levels) {
+  lv <- levels %||%
+    (if (is.factor(col)) base::levels(col) else sort(unique(as.character(col))))
+  lv <- as.character(lv)
+  ix <- match(as.character(col), lv) - 1L
+  list(levels = lv, index = as.integer(ifelse(is.na(ix), -1L, ix)))
 }
 
 # Resolve the denominator for each level of `by`.
@@ -235,11 +284,11 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
                       group_levels = NULL, by_levels = NULL,
                       denominator = c("population", "count"),
                       population = NULL, label = NULL) {
-  group <- col_name(substitute(group))
+  group <- col_name(substitute(group), parent.frame())
   by_q  <- substitute(by)
-  by    <- if (is.null(by_q)) NULL else col_name(by_q)
+  by    <- if (is.null(by_q)) NULL else col_name(by_q, parent.frame())
   dr_q  <- substitute(drill)
-  drill <- if (is.null(dr_q)) NULL else col_name(dr_q)
+  drill <- if (is.null(dr_q)) NULL else col_name(dr_q, parent.frame())
 
   check_spec(spec)
   check_cols(spec, group)
@@ -415,9 +464,9 @@ view_table <- function(spec, cols = NULL, labels = NULL, max_rows = 400L) {
 view_hist <- function(spec, x, bins = 24L, by = NULL, log = FALSE,
                       denominator = c("count", "population"),
                       population = NULL, label = NULL) {
-  x    <- col_name(substitute(x))
+  x    <- col_name(substitute(x), parent.frame())
   by_q <- substitute(by)
-  by   <- if (is.null(by_q)) NULL else col_name(by_q)
+  by   <- if (is.null(by_q)) NULL else col_name(by_q, parent.frame())
 
   check_spec(spec)
   check_cols(spec, x)

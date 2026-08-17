@@ -199,6 +199,91 @@ test_that("rows outside the supplied facet levels are marked, not dropped", {
   )
 })
 
+grid_df <- function() {
+  data.frame(
+    id  = sprintf("s%d", 1:6),
+    a   = as.numeric(1:6),
+    b   = as.numeric(6:1),
+    arm = c("P", "A", "P", "A", "P", "A"),
+    sex = c("F", "F", "M", "M", "F", "M"),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that("view_points() numbers grid panels row-major", {
+  v <- (linkagg(grid_df(), id) |>
+          view_points(a, b, facet = arm, facet_row = sex))$views[[1]]
+
+  expect_equal(v$facetLevels, c("A", "P"))     # columns
+  expect_equal(v$facetRowLevels, c("F", "M"))  # rows
+
+  # cell = row * n_columns + column, so F/P = 0*2+1 = 1 and M/A = 1*2+0 = 2.
+  expect_equal(v$facetIndex, c(1L, 0L, 3L, 2L, 1L, 2L))
+
+  # Every panel index must decode back to the subject's own arm and sex.
+  d <- grid_df()
+  nC <- length(v$facetLevels)
+  expect_equal(v$facetLevels[v$facetIndex %% nC + 1L], d$arm)
+  expect_equal(v$facetRowLevels[v$facetIndex %/% nC + 1L], d$sex)
+})
+
+test_that("a grid cell is unassigned if either variable is unmatched", {
+  v <- (linkagg(grid_df(), id) |>
+          view_points(a, b, facet = arm, facet_row = sex,
+                      facet_row_levels = "F"))$views[[1]]
+  # The three male subjects fall outside the supplied row levels.
+  expect_equal(v$facetIndex, c(1L, 0L, -1L, -1L, 1L, -1L))
+})
+
+test_that("columns can be chosen at runtime, as Shiny inputs are", {
+  d <- grid_df()
+  pick <- list(col = "arm", row = "sex")   # stands in for input$...
+
+  v <- (linkagg(d, id) |>
+          view_points(a, b, facet = pick$col, facet_row = pick$row))$views[[1]]
+  expect_equal(v$facet, "arm")
+  expect_equal(v$facetRow, "sex")
+
+  # An expression evaluating to NULL means "no facet row", so calling code can
+  # switch the grid off without building a different call.
+  none <- NULL
+  v2 <- (linkagg(d, id) |>
+           view_points(a, b, facet = pick$col,
+                       facet_row = if (is.null(none)) NULL else none))$views[[1]]
+  expect_null(v2$facetRow)
+  expect_null(v2$facetRowLevels)
+
+  # A bare name still wins over a same-named variable in scope.
+  arm <- "sex"
+  v3 <- (linkagg(d, id) |> view_points(a, b, facet = arm))$views[[1]]
+  expect_equal(v3$facet, "arm")
+
+  # Plain strings and variables holding strings both resolve.
+  v4 <- (linkagg(d, id) |> view_bars("arm"))$views[[1]]
+  expect_equal(v4$group, "arm")
+
+  # A bare symbol is always the column name itself, never the variable's value,
+  # so `sex` here means the sex column even though `sex` also holds "arm".
+  sex <- "arm"
+  v5 <- (linkagg(d, id) |> view_bars(pick$col, by = sex))$views[[1]]
+  expect_equal(v5$group, "arm")
+  expect_equal(v5$by, "sex")
+
+  # Wrapping in parentheses makes it an expression, so the value is used.
+  v6 <- (linkagg(d, id) |> view_bars(pick$col, by = (sex)))$views[[1]]
+  expect_equal(v6$by, "arm")
+})
+
+test_that("view_points() rejects a row variable with no column variable", {
+  expect_error(linkagg(grid_df(), id) |> view_points(a, b, facet_row = sex),
+               "needs `facet`")
+  expect_error(
+    linkagg(grid_df(), id) |>
+      view_points(a, b, facet = arm, facet_row = sex, facet_row_levels = "zz"),
+    "matched"
+  )
+})
+
 # ---- drill-down ------------------------------------------------------------
 
 drill_df <- function() {

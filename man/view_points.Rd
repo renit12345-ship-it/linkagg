@@ -14,7 +14,9 @@ view_points(
   y_lab = NULL,
   zone = NULL,
   facet = NULL,
-  facet_levels = NULL
+  facet_levels = NULL,
+  facet_row = NULL,
+  facet_row_levels = NULL
 )
 }
 \arguments{
@@ -31,9 +33,17 @@ view_points(
 cut-points fall inside the region.}
 
 \item{facet}{Optional column giving one small multiple per level, drawn on
-shared scales so panels are comparable. Brushing acts within one panel.}
+shared scales so panels are comparable. Brushing acts within one panel.
+With \code{facet_row} also set, this becomes the column variable of a grid.}
 
-\item{facet_levels}{Optional character vector fixing panel order.}
+\item{facet_levels, facet_row_levels}{Optional character vectors fixing the
+order of columns and of rows.}
+
+\item{facet_row}{Optional second column, laid out down the rows to give a
+full grid of panels: one column per level of \code{facet}, one row per level
+of \code{facet_row}, such as arm across and sex down. Scales stay shared across
+the whole grid, so every panel is comparable with every other, and a brush
+still selects only the rows in the one cell you dragged over.}
 }
 \value{
 The updated \code{linkagg_spec}.

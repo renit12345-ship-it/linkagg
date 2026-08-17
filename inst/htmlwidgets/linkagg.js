@@ -233,10 +233,34 @@ HTMLWidgets.widget({
       return cellN;
     }
 
+    // Panel grid. With a row variable the panels are a true grid, one column
+    // per level of `facet` and one row per level of `facet_row`; without one
+    // they wrap. Both cases resolve to a panel index of row * nCols + col.
+    function facetGrid() {
+      if (!st.facets) return { nC: 1, nR: 1, nF: 1, grid: false };
+      var nCol = st.facets.levels.length;
+      if (st.facets.rowLevels) {
+        var nRow = st.facets.rowLevels.length;
+        return { nC: nCol, nR: nRow, nF: nCol * nRow, grid: true };
+      }
+      var c = nCol <= 1 ? 1 : (nCol <= 3 ? nCol : Math.ceil(Math.sqrt(nCol)));
+      return { nC: c, nR: Math.ceil(nCol / c), nF: nCol, grid: false };
+    }
+
+    // Human-readable name for a panel index, for the selection source line.
+    function panelLabel(f) {
+      if (!st.facets) return "";
+      var fg = facetGrid();
+      if (!fg.grid) return st.facets.levels[f];
+      return st.facets.levels[f % fg.nC] + " / " +
+             st.facets.rowLevels[Math.floor(f / fg.nC)];
+    }
+
     // ---- layout ----------------------------------------------------------
     function computeLayout() {
       var B = st.B, SC = st.SC;
-      var nF = st.facets ? st.facets.levels.length : 1;
+      var fg = facetGrid();
+      var nF = fg.nF;
       SC.w = nF > 1 ? 556 : 424;
       B.x0 = nF > 1 ? 700 : 700;
 
@@ -244,7 +268,8 @@ HTMLWidgets.widget({
       st.rowPitch = pitch;
       var barsBottom = B.top + (st.barAgg ? st.barAgg.nL : 0) * pitch + 20;
 
-      SC.h = nF > 1 ? 300 : 330;
+      // A grid of panels needs room to stay readable as rows are added.
+      SC.h = fg.nR > 1 ? Math.max(300, 152 * fg.nR) : (nF > 1 ? 300 : 330);
       var scatterBottom = SC.t + SC.h + 44;
       st.H.top = scatterBottom + 18;
       var leftBottom = st.hv ? st.H.top + st.H.h + 34 : scatterBottom;
@@ -266,11 +291,11 @@ HTMLWidgets.widget({
       var pv = st.pv, SC = st.SC;
       var xv = arr(st.x.cols[pv.x]), yv = arr(st.x.cols[pv.y]);
 
-      var levels = st.facets ? st.facets.levels : [null];
-      var nF = levels.length;
-      var cols = nF <= 1 ? 1 : (nF <= 3 ? nF : Math.ceil(Math.sqrt(nF)));
-      var rowsN = Math.ceil(nF / cols);
-      var gapX = 22, gapY = 30;
+      var fg = facetGrid();
+      var colLv = st.facets ? st.facets.levels : [null];
+      var rowLv = st.facets ? st.facets.rowLevels : null;
+      var nF = fg.nF, cols = fg.nC, rowsN = fg.nR;
+      var gapX = 22, gapY = fg.grid ? 34 : 30;
       var pw = (SC.w - (cols - 1) * gapX) / cols;
       var ph = (SC.h - (rowsN - 1) * gapY) / rowsN;
 
@@ -281,8 +306,9 @@ HTMLWidgets.widget({
       st.px = new Float64Array(st.n);
       st.py = new Float64Array(st.n);
 
-      levels.forEach(function (lab, f) {
+      d3.range(nF).forEach(function (f) {
         var cx = f % cols, cy = Math.floor(f / cols);
+        var lab = fg.grid ? null : colLv[f];
         var x0 = SC.l + cx * (pw + gapX);
         var y0 = SC.t + cy * (ph + gapY);
         var xs = (pv.xlog ? d3.scaleLog() : d3.scaleLinear())
@@ -325,9 +351,30 @@ HTMLWidgets.widget({
                 .style("font-size", "9px").text(fmt(t));
           });
         }
-        if (lab !== null) {
+        if (lab !== null && lab !== undefined) {
           gAxis.append("text").attr("x", x0 + 2).attr("y", y0 - 6)
               .attr("fill", PAL.text).style("font-size", "10px").text(lab);
+        }
+        // Grid strips: column headings across the top, row headings down the
+        // right, each drawn once rather than repeated on every panel.
+        if (fg.grid && cy === 0) {
+          gAxis.append("rect").attr("x", x0).attr("y", y0 - 21)
+              .attr("width", pw).attr("height", 16).attr("rx", 3)
+              .attr("fill", PAL.panel).attr("stroke", PAL.rule);
+          gAxis.append("text").attr("x", x0 + pw / 2).attr("y", y0 - 9)
+              .attr("text-anchor", "middle").attr("fill", PAL.text)
+              .style("font-size", "10px").style("font-weight", "600").text(colLv[cx]);
+        }
+        if (fg.grid && cx === cols - 1) {
+          gAxis.append("rect").attr("x", x0 + pw + 5).attr("y", y0)
+              .attr("width", 16).attr("height", ph).attr("rx", 3)
+              .attr("fill", PAL.panel).attr("stroke", PAL.rule);
+          gAxis.append("text")
+              .attr("transform", "translate(" + (x0 + pw + 17) + "," +
+                    (y0 + ph / 2) + ") rotate(90)")
+              .attr("text-anchor", "middle").attr("fill", PAL.text)
+              .style("font-size", "10px").style("font-weight", "600")
+              .text(rowLv[cy]);
         }
 
         for (var i = 0; i < st.n; i++) {
@@ -356,7 +403,9 @@ HTMLWidgets.widget({
       gTag.append("text").attr("x", SC.l).attr("y", 26).attr("fill", PAL.dim)
           .style("font-size", "10px").style("letter-spacing", "0.07em")
           .text("ROW LEVEL \u2014 " + st.n + " ROWS" +
-                (st.facets ? " \u00b7 BY " + String(st.facets.col).toUpperCase() : "") +
+                (st.facets ? " \u00b7 BY " + String(st.facets.col).toUpperCase() +
+                   (st.facets.rowLevels
+                      ? " \u00d7 " + String(st.facets.rowCol).toUpperCase() : "") : "") +
                 (st.useCanvas ? " \u00b7 CANVAS" : ""));
 
       if (!st.useCanvas) {
@@ -805,8 +854,7 @@ HTMLWidgets.widget({
               setMaskFromPredicate(function (i) {
                 if (fi && fi[i] !== p.f) return false;
                 return px[i] >= x0 && px[i] <= x1 && py[i] >= y0 && py[i] <= y1;
-              }, "brushed region" +
-                 (st.facets ? " \u00b7 " + st.facets.levels[p.f] : ""));
+              }, "brushed region" + (st.facets ? " \u00b7 " + panelLabel(p.f) : ""));
               render(); pushShiny();
             });
         var g = gBrush.append("g").attr("id", id).call(b);
@@ -866,6 +914,8 @@ HTMLWidgets.widget({
         st.facets = (st.pv && st.pv.facetLevels) ? {
           col: one(st.pv.facet),
           levels: arr(st.pv.facetLevels),
+          rowCol: one(st.pv.facetRow),
+          rowLevels: st.pv.facetRowLevels ? arr(st.pv.facetRowLevels) : null,
           index: Int32Array.from(arr(st.pv.facetIndex))
         } : null;
 
