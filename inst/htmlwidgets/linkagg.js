@@ -440,6 +440,22 @@ HTMLWidgets.widget({
       st.px = new Float64Array(st.n);
       st.py = new Float64Array(st.n);
 
+      var panelN = new Int32Array(Math.max(1, nF));
+      if (st.facets) {
+        for (var pn = 0; pn < st.n; pn++) {
+          var pf = st.facets.index[pn];
+          if (pf >= 0 && pf < nF) panelN[pf]++;
+        }
+      } else { panelN[0] = st.n; }
+
+      // Context layer: every panel also shows the whole cohort faintly behind
+      // its own subjects, so a cell can be read against the distribution as a
+      // whole rather than only against itself. Panels share scales and differ
+      // by a translation, so the ghost positions come from the live ones
+      // without re-running a scale per point per panel.
+      st.ghost = (nF > 1) && !st.useCanvas &&
+                 (st.n * nF <= 60000);
+
       d3.range(nF).forEach(function (f) {
         var cx = f % cols, cy = Math.floor(f / cols);
         var lab = fg.grid ? null : colLv[f];
@@ -467,15 +483,21 @@ HTMLWidgets.widget({
               .attr("stroke-opacity", 0.45).attr("stroke-dasharray", "4 4");
         }
 
-        gAxis.append("rect").attr("x", x0).attr("y", y0)
-            .attr("width", pw).attr("height", ph)
-            .attr("fill", "none").attr("stroke", PAL.rule);
+        // No box around each panel. In a grid of small multiples the repeated
+        // frame is the loudest thing on the page and carries no information;
+        // gridlines and a baseline place the data just as well.
+        gAxis.append("line").attr("x1", x0).attr("x2", x0 + pw)
+            .attr("y1", y0 + ph).attr("y2", y0 + ph).attr("stroke", PAL.rule);
 
+        // Tick labels go on the outer edge only. Repeating the same numbers
+        // under all six panels is noise, and the scales are shared anyway.
+        var bottomRow = (cy === rowsN - 1) || (f + cols >= nF);
         ticksFor(xs, pv.xlog, nF > 1 ? 3 : 5).forEach(function (t) {
           if (xs(t) < x0 - 1 || xs(t) > x0 + pw + 1) return;
           gAxis.append("line").attr("x1", xs(t)).attr("x2", xs(t))
               .attr("y1", y0).attr("y2", y0 + ph)
               .attr("stroke", PAL.rule).attr("stroke-opacity", 0.7);
+          if (!bottomRow) return;
           gAxis.append("text").attr("x", xs(t)).attr("y", y0 + ph + 13)
               .attr("text-anchor", "middle").attr("fill", PAL.dim)
               .style("font-size", "9px").text(fmt(t));
@@ -498,25 +520,34 @@ HTMLWidgets.widget({
           gAxis.append("text").attr("x", x0 + 2).attr("y", y0 - 6)
               .attr("fill", PAL.text).style("font-size", "10px").text(lab);
         }
+        // Count in the panel, so each cell states its own denominator rather
+        // than making the reader infer it from mark density.
+        if (fg.grid || nF > 1) {
+          gAxis.append("text").attr("x", x0 + pw - 3).attr("y", y0 + 11)
+              .attr("text-anchor", "end").attr("fill", PAL.dim)
+              .style("font-size", "9px")
+              .text("n = " + fmtN(panelN[f] || 0));
+        }
+
         // Grid strips: column headings across the top, row headings down the
-        // right, each drawn once rather than repeated on every panel.
+        // right, each drawn once rather than repeated on every panel. They are
+        // set typographically instead of in filled boxes — at six panels the
+        // boxes framed the labels more strongly than the data.
         if (fg.grid && cy === 0) {
-          gAxis.append("rect").attr("x", x0).attr("y", y0 - 21)
-              .attr("width", pw).attr("height", 16).attr("rx", 3)
-              .attr("fill", PAL.panel).attr("stroke", PAL.rule);
-          gAxis.append("text").attr("x", x0 + pw / 2).attr("y", y0 - 9)
-              .attr("text-anchor", "middle").attr("fill", PAL.text)
-              .style("font-size", "10px").style("font-weight", "600").text(colLv[cx]);
+          gAxis.append("text").attr("x", x0).attr("y", y0 - 12)
+              .attr("fill", PAL.text).style("font-size", "11px")
+              .style("font-weight", "600").style("letter-spacing", "0.01em")
+              .text(colLv[cx]);
+          gAxis.append("line").attr("x1", x0).attr("x2", x0 + pw)
+              .attr("y1", y0 - 6).attr("y2", y0 - 6)
+              .attr("stroke", PAL.text).attr("stroke-opacity", 0.28);
         }
         if (fg.grid && cx === cols - 1) {
-          gAxis.append("rect").attr("x", x0 + pw + 5).attr("y", y0)
-              .attr("width", 16).attr("height", ph).attr("rx", 3)
-              .attr("fill", PAL.panel).attr("stroke", PAL.rule);
           gAxis.append("text")
-              .attr("transform", "translate(" + (x0 + pw + 17) + "," +
+              .attr("transform", "translate(" + (x0 + pw + 15) + "," +
                     (y0 + ph / 2) + ") rotate(90)")
               .attr("text-anchor", "middle").attr("fill", PAL.text)
-              .style("font-size", "10px").style("font-weight", "600")
+              .style("font-weight", "600").style("font-size", "11px")
               .text(rowLv[cy]);
         }
 
@@ -563,6 +594,39 @@ HTMLWidgets.widget({
       st.halo = gPts.append("circle").attr("r", 6).attr("fill", "none")
           .attr("stroke", PAL.text).attr("stroke-width", 1.5)
           .attr("opacity", 0).attr("pointer-events", "none");
+    }
+
+    function sizeCanvas() {
+      var node = canvas.node();
+      var cssW = stage.node().clientWidth || st.VB.w;
+      var k = cssW / st.VB.w, dpr = window.devicePixelRatio || 1;
+      var cssH = st.VB.h * k;
+      node.width = Math.max(1, Math.round(cssW * dpr));
+      node.height = Math.max(1, Math.round(cssH * dpr));
+      canvas.style("height", cssH + "px");
+      var ctx = node.getContext("2d");
+      ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+      ctx.clearRect(0, 0, st.VB.w, st.VB.h);
+      return ctx;
+    }
+
+    // Draws the whole cohort into every panel, faintly, behind the live marks.
+    function paintGhosts() {
+      if (!st.ghost || !st.pv || !st.panels.length || !st.facets) return;
+      var ctx = sizeCanvas();
+      var P = st.panels, nP = P.length, fi = st.facets.index;
+      ctx.fillStyle = PAL.mute;
+      ctx.globalAlpha = 0.5;
+      for (var p = 0; p < nP; p++) {
+        var ox = P[p].x0, oy = P[p].y0;
+        for (var i = 0; i < st.n; i++) {
+          var f = fi[i];
+          if (f < 0 || f === p) continue;   // its own panel draws it properly
+          var bx = st.px[i] - P[f].x0 + ox, by = st.py[i] - P[f].y0 + oy;
+          ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, 6.283185); ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
     }
 
     function paintCanvas() {
@@ -1286,10 +1350,12 @@ HTMLWidgets.widget({
         var mode = one(opt.pointRenderer) || "auto";
         var thr = one(opt.canvasThreshold) || 6000;
         st.useCanvas = mode === "canvas" || (mode === "auto" && st.n > thr);
-        canvas.style("display", st.useCanvas ? "block" : "none");
-
         computeLayout();
         drawScatterFrame();
+        // drawScatterFrame decides whether a context layer is worth drawing,
+        // so the canvas visibility is settled after it, not before.
+        canvas.style("display", (st.useCanvas || st.ghost) ? "block" : "none");
+        paintGhosts();
         drawBars();
         drawHist();
         drawVolcano();
@@ -1312,7 +1378,10 @@ HTMLWidgets.widget({
         el.style.height = "auto";
       },
 
-      resize: function (w, h) { if (st.useCanvas) paintCanvas(); }
+      resize: function (w, h) {
+        if (st.useCanvas) paintCanvas();
+        else if (st.ghost) paintGhosts();
+      }
     };
   }
 });
