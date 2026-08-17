@@ -23,11 +23,13 @@ it: the box stays live, so you can slide it around the plot and the bars, the
 counts and the listing underneath all follow it while it moves. That is what
 makes it exploratory rather than a query, since you can sweep a region and
 watch which organ classes respond instead of guessing, releasing, looking, and
-guessing again. Click a bar rather than its label and the traffic
-runs the other way, that bar's own subjects lighting up in the scatter and
-becoming the listing. Click a bar's label instead and it walks down the MedDRA
-hierarchy, organ class to preferred term to the term the investigator wrote,
-with the breadcrumb walking back up.*
+guessing again. The volcano beneath the scatter answers to the same
+selection, each of its points being one preferred term and filling from the
+bottom like a bar. Click a bar rather than its label and the traffic runs the
+other way, that bar's own subjects lighting up in the scatter and becoming the
+listing. Click a bar's label instead and it walks down the MedDRA hierarchy,
+organ class to preferred term to the term the investigator wrote, with the
+breadcrumb walking back up.*
 
 ## Status
 
