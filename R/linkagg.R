@@ -319,10 +319,19 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
   }
   if (!length(lv)) stop("`group` has no non-missing values.", call. = FALSE)
 
-  membership <- lapply(vals, function(v) {
+  # Positional membership, aligned element by element with the drill terms so
+  # that drilling can pair a group with the finer term recorded beside it.
+  pair_group <- lapply(vals, function(v) {
     ix <- match(v, lv)
     as.integer(ix[!is.na(ix)] - 1L)   # zero-based for the JavaScript side
   })
+  # Counting membership, which must be one entry per subject per group. A bar
+  # is a count of subjects measured against an arm's population, so a subject
+  # listed under one group several times — an events dataset carries one row
+  # per preferred term, and several terms share a system organ class — has to
+  # count once. Without this the numerator can exceed its own denominator and
+  # the bar reads over 100%.
+  membership <- lapply(pair_group, function(z) as.integer(unique(z)))
 
   # Drill terms pair positionally with group entries, and must survive the
   # same NA filtering the group entries went through.
@@ -349,6 +358,7 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
       keep <- !is.na(match(gv, lv))
       as.integer(match(dv[keep], drillLevels) - 1L)
     }, vals, dvals)
+    # drillIdx pairs with pair_group, not with the de-duplicated membership.
     drillIdx <- lapply(drillIdx, function(z) as.integer(ifelse(is.na(z), -1L, z)))
   }
 
@@ -364,7 +374,8 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
       membership = unname(membership), armIndex = NULL,
       cellTotals = as.integer(totals), denom = NULL,
       denominator = "count", label = label %||% group,
-      drill = drill, drillLevels = drillLevels, drillIdx = unname(drillIdx)
+      drill = drill, drillLevels = drillLevels, drillIdx = unname(drillIdx),
+      pairGroup = if (is.null(drill)) NULL else unname(pair_group)
     )
   } else {
     arm <- spec$data[[by]]
@@ -401,7 +412,8 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
       denom = denom,
       denominator = denominator,
       label = label %||% group,
-      drill = drill, drillLevels = drillLevels, drillIdx = unname(drillIdx)
+      drill = drill, drillLevels = drillLevels, drillIdx = unname(drillIdx),
+      pairGroup = if (is.null(drill)) NULL else unname(pair_group)
     )
   }
 

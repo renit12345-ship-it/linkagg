@@ -441,3 +441,51 @@ test_that("view_volcano() validates its arms", {
   expect_error(linkagg(d, id) |> view_volcano(PT, by = arm, min_n = 99L),
                "No term reaches")
 })
+
+# ---- subject counting ------------------------------------------------------
+
+test_that("a subject listed twice under one group counts once", {
+  # An events dataset carries one row per preferred term, and several terms
+  # share a system organ class, so the collapsed list-column repeats the SOC.
+  df <- data.frame(id = c("s1", "s2"), arm = c("A", "A"),
+                   stringsAsFactors = FALSE)
+  df$SOC <- list(c("GI", "GI", "GI"), c("GI", "Skin"))
+
+  v <- (linkagg(df, id) |> view_bars(SOC))$views[[1]]
+  gi <- match("GI", v$levels)
+  expect_equal(v$cellTotals[gi], 2L)          # two subjects, not four
+  expect_equal(sort(v$membership[[1]]), gi - 1L)
+  expect_length(v$membership[[1]], 1L)
+})
+
+test_that("a bar can never exceed its own denominator", {
+  set.seed(3)
+  n <- 60
+  df <- data.frame(id = sprintf("s%02d", 1:n),
+                   arm = rep(c("P", "A"), each = n / 2),
+                   stringsAsFactors = FALSE)
+  # Every subject repeats one SOC several times, the shape that produced a
+  # bar reading over 100% on real ADaM data.
+  df$SOC <- lapply(seq_len(n), function(i) rep("GI", sample(1:6, 1)))
+
+  v <- (linkagg(df, id) |> view_bars(SOC, by = arm))$views[[1]]
+  nA <- length(v$byLevels)
+  pct <- v$cellTotals / rep(v$denom, times = length(v$levels)) * 100
+  expect_true(all(pct <= 100))
+  expect_equal(sum(v$cellTotals), n)
+})
+
+test_that("drill-down still pairs correctly after de-duplication", {
+  df <- data.frame(id = c("s1", "s2"), arm = c("A", "B"),
+                   stringsAsFactors = FALSE)
+  df$SOC <- list(c("GI", "GI"), "GI")
+  df$PT  <- list(c("Nausea", "Vomiting"), "Nausea")
+
+  v <- (linkagg(df, id) |> view_bars(SOC, by = arm, drill = PT))$views[[1]]
+  expect_equal(v$cellTotals[match("GI", v$levels) ], 1L)  # s1 counted once
+  # pairGroup keeps both entries so the drill terms stay aligned.
+  expect_length(v$pairGroup[[1]], 2L)
+  expect_length(v$drillIdx[[1]], 2L)
+  expect_length(v$membership[[1]], 1L)
+  expect_equal(sort(v$drillLevels), c("Nausea", "Vomiting"))
+})

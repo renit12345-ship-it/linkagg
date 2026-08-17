@@ -196,17 +196,34 @@ rather than running an inverse scale per point. Above `canvas_threshold` rows
 (6,000 by default) the scatter renders to canvas, so recolouring is one pass
 instead of touching every DOM node.
 
-Measured on a single core, resolving a full selection through the membership
-index and re-running the brush pass:
+Measured end to end on one machine: building the spec in R, writing the file,
+and the redraw the browser reports after a brush.
 
-| rows    | hit counting | brush pass | total  |
-|---------|--------------|------------|--------|
-| 10,000  | 1.9 ms       | 2.7 ms     | 4.6 ms |
-| 100,000 | 2.1 ms       | 3.2 ms     | 5.3 ms |
-| 500,000 | 16.2 ms      | 6.9 ms     | 23.0 ms |
+| subjects  | spec  | file size | brush redraw |
+|-----------|-------|-----------|--------------|
+| 254 (real CDISC pilot) | 0.02 s | 0.4 MB | 3 ms |
+| 10,000    | 0.03 s | 0.6 MB   | 5 ms      |
+| 200,000   | 0.83 s | 12.3 MB  | 344 ms    |
+| 1,000,000 | 4.5 s  | 61.3 MB  | 1,746 ms  |
 
-Those are worst cases, with every row selected. Drawing is the remaining cost
-above roughly 100,000 rows, not the arithmetic.
+**Read the file-size column before the timing column.** The row-level data
+travels inside the HTML, so size grows linearly at roughly 60 MB per million
+subjects. That, not speed, is the real ceiling on a self-contained file:
+
+- Up to ~200,000 subjects a brush stays under half a second and the file is
+  small enough to email. This is the range the package is built for, and it is
+  already far beyond any single trial.
+- At 1,000,000 it still works, but a 61 MB file and a 1.7-second redraw are
+  past the point where anyone would call it interactive.
+- At 10,000,000 the arithmetic gives a ~600 MB file. That is not a figure you
+  can archive or send, whatever the redraw time. Registry-scale cohorts need
+  the aggregation done in R, with the widget receiving the aggregates and a
+  sample of the row layer — not every row.
+
+Drawing is the cost above roughly 100,000 subjects, not the arithmetic:
+resolving a full selection through the membership index stays in the low
+milliseconds, while repainting a million marks does not. Turning `threads`
+off is the single biggest saving at that size.
 
 ## Provenance
 

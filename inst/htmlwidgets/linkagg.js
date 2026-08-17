@@ -59,7 +59,12 @@ HTMLWidgets.widget({
         .style("border", "1px solid " + PAL.rule)
         .style("border-radius", "10px")
         .style("overflow", "hidden");
-    var stage = root.append("div").style("position", "relative");
+    var stage = root.append("div").style("position", "relative")
+        .on("pointermove", function (ev) { onFigureMove(ev); })
+        .on("pointerleave", function () {
+          hoverIx = -1; hideTip();
+          if (st.halo) st.halo.attr("opacity", 0);
+        });
     var canvas = stage.append("canvas")
         .style("position", "absolute").style("top", 0).style("left", 0)
         .style("pointer-events", "none").style("width", "100%");
@@ -107,6 +112,82 @@ HTMLWidgets.widget({
         .on("mouseleave", function () { d3.select(this).style("background", PAL.ground); })
         .on("click", function () { clearSel(); });
 
+    // Hover readout. "Which subject is that point?" is the first question a
+    // reviewer asks, and until now it could only be answered by brushing.
+    var tip = stage.append("div")
+        .style("position", "absolute").style("pointer-events", "none")
+        .style("opacity", 0).style("z-index", 5)
+        .style("background", PAL.text).style("color", PAL.ground)
+        .style("padding", "7px 10px").style("border-radius", "7px")
+        .style("font-size", "11.5px").style("line-height", 1.45)
+        .style("white-space", "pre").style("transition", "opacity 90ms ease")
+        .style("box-shadow", "0 4px 14px rgba(16,24,40,.18)");
+
+    function showTip(ev, text) {
+      var b = stage.node().getBoundingClientRect();
+      var x = ev.clientX - b.left, y = ev.clientY - b.top;
+      tip.text(text).style("opacity", 1);
+      var tw = tip.node().offsetWidth, th = tip.node().offsetHeight;
+      // Keep the readout inside the figure rather than clipped at its edge.
+      tip.style("left", Math.max(4, Math.min(x + 14, b.width - tw - 4)) + "px")
+         .style("top", Math.max(4, y - th - 10) + "px");
+    }
+    function hideTip() { tip.style("opacity", 0); }
+
+    // Nearest-mark lookup, driven from one listener on the whole figure rather
+    // than a handler per mark: the brush overlay sits above the points and
+    // would swallow per-mark events, and a handler per mark does not scale to
+    // a hundred thousand of them. A linear scan over the projected
+    // coordinates is comfortably fast at the sizes the point renderer allows.
+    function nearestPoint(vx, vy, maxDist) {
+      if (!st.px || !st.pv) return -1;
+      var best = -1, bd = maxDist * maxDist, i, dx, dy, d;
+      for (i = 0; i < st.n; i++) {
+        if (st.px[i] < -1000) continue;
+        dx = st.px[i] - vx; dy = st.py[i] - vy;
+        d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = i; }
+      }
+      return best;
+    }
+
+    function pointReadout(i) {
+      var pv = st.pv, kv = arr(st.x.cols[st.x.key]);
+      var xv = arr(st.x.cols[pv.x])[i], yv = arr(st.x.cols[pv.y])[i];
+      var num = function (z) {
+        return (typeof z === "number")
+          ? (Math.round(z) === z ? String(z) : z.toFixed(2)) : String(z);
+      };
+      var out = String(kv[i]) +
+        "\n" + String(one(pv.xlab)) + ": " + num(xv) +
+        "\n" + String(one(pv.ylab)) + ": " + num(yv);
+      if (st.facets) {
+        out += "\n" + String(st.facets.col) + ": " + panelLabel(st.facets.index[i]);
+      }
+      return out;
+    }
+
+    var hoverIx = -1;
+    function onFigureMove(ev) {
+      if (!st.pv || !st.px) return;
+      var rect = svg.node().getBoundingClientRect();
+      if (!rect.width) return;
+      var k = st.VB.w / rect.width;
+      var vx = (ev.clientX - rect.left) * k, vy = (ev.clientY - rect.top) * k;
+      var i = nearestPoint(vx, vy, 9 * k);
+      if (i === hoverIx) return;
+      hoverIx = i;
+      if (i < 0) {
+        hideTip();
+        if (st.halo) st.halo.attr("opacity", 0);
+        return;
+      }
+      if (st.halo) {
+        st.halo.attr("cx", st.px[i]).attr("cy", st.py[i]).attr("opacity", 0.9);
+      }
+      showTip(ev, pointReadout(i));
+    }
+
     var tableWrap = root.append("div").style("display", "none");
     var footer = root.append("div")
         .style("padding", "10px 16px").style("border-top", "1px solid " + PAL.rule)
@@ -132,6 +213,9 @@ HTMLWidgets.widget({
       if (t >= 10000 || (t > 0 && t < 0.01)) return d3.format(".1e")(t);
       return d3.format(t < 1 ? ".2~f" : "~g")(t);
     }
+    // Counts get thousands separators: at registry scale "1000000" is not a
+    // number anyone reads at a glance.
+    var fmtN = d3.format(",");
 
     // ---- aggregate views reduced to one shape ---------------------------
     function aggFromBars(bv, drillG) {
@@ -146,7 +230,11 @@ HTMLWidgets.widget({
         for (i = 0; i < st.n; i++) mem[i] = Int32Array.from(arr(rawMem[i]));
         cells = Int32Array.from(arr(bv.cellTotals));
       } else {
-        // drilled: sub-levels are the drill terms that appear under this group
+        // Drilled: sub-levels are the drill terms recorded under this group.
+        // This path reads pairGroup, which keeps one entry per group/term pair
+        // and so stays aligned with drillIdx. bv.membership is de-duplicated
+        // for counting and would not line up.
+        rawMem = arr(bv.pairGroup);
         var rawDrill = arr(bv.drillIdx);
         var dLev = arr(bv.drillLevels);
         var counts = {}, present = [];
@@ -284,6 +372,20 @@ HTMLWidgets.widget({
       SC.w = nF > 1 ? 556 : 424;
       B.x0 = nF > 1 ? 700 : 700;
 
+      // The value label sits to the right of each bar and grows with the
+      // magnitude of the counts, so the bar has to give up width for it.
+      // At registry scale "1,727 / 99,672 (1.7%)" needs roughly twice the room
+      // "12 / 86 (14.0%)" does, and a fixed width clipped it.
+      var maxCell = 0;
+      if (st.barAgg) {
+        for (var ci = 0; ci < st.barAgg.cells.length; ci++) {
+          if (st.barAgg.cells[ci] > maxCell) maxCell = st.barAgg.cells[ci];
+        }
+      }
+      var digits = fmtN(maxCell).length;
+      var reserve = Math.ceil((digits * 2 + 10) * 5.4) + 16;
+      B.w = Math.max(150, Math.min(392, st.VB.w - B.x0 - reserve));
+
       var pitch = B.labH + (st.barAgg ? st.barAgg.nA : 1) * (B.subH + B.subGap) + B.gap;
       st.rowPitch = pitch;
       var barsBottom = B.top + (st.barAgg ? st.barAgg.nL : 0) * pitch + 20;
@@ -371,9 +473,18 @@ HTMLWidgets.widget({
 
         ticksFor(xs, pv.xlog, nF > 1 ? 3 : 5).forEach(function (t) {
           if (xs(t) < x0 - 1 || xs(t) > x0 + pw + 1) return;
+          gAxis.append("line").attr("x1", xs(t)).attr("x2", xs(t))
+              .attr("y1", y0).attr("y2", y0 + ph)
+              .attr("stroke", PAL.rule).attr("stroke-opacity", 0.7);
           gAxis.append("text").attr("x", xs(t)).attr("y", y0 + ph + 13)
               .attr("text-anchor", "middle").attr("fill", PAL.dim)
               .style("font-size", "9px").text(fmt(t));
+        });
+        ticksFor(ys, pv.ylog, nF > 1 ? 3 : 5).forEach(function (t) {
+          if (ys(t) < y0 - 1 || ys(t) > y0 + ph + 1) return;
+          gAxis.append("line").attr("x1", x0).attr("x2", x0 + pw)
+              .attr("y1", ys(t)).attr("y2", ys(t))
+              .attr("stroke", PAL.rule).attr("stroke-opacity", 0.7);
         });
         if (cx === 0) {
           ticksFor(ys, pv.ylog, nF > 1 ? 3 : 5).forEach(function (t) {
@@ -447,6 +558,11 @@ HTMLWidgets.widget({
             .attr("cy", function (i) { return st.py[i]; })
             .attr("r", r).attr("fill", PAL.data).attr("fill-opacity", 0.5);
       } else { st.ptSel = null; }
+      // The halo marks whichever point the pointer is nearest. It lives above
+      // the marks but takes no pointer events of its own.
+      st.halo = gPts.append("circle").attr("r", 6).attr("fill", "none")
+          .attr("stroke", PAL.text).attr("stroke-width", 1.5)
+          .attr("opacity", 0).attr("pointer-events", "none");
     }
 
     function paintCanvas() {
@@ -584,12 +700,22 @@ HTMLWidgets.widget({
                 .attr("y", yy + B.subH - 2).attr("fill", PAL.dim)
                 .style("font-size", "9.5px").text(cellText(agg, cellN, 0, a, false));
 
+            // Drawn behind the bar so the row reads as one clickable target.
+            var back = grp.insert("rect", ":first-child")
+                .attr("x", B.x0 - 6).attr("y", yy - 1)
+                .attr("width", B.w + 130).attr("height", B.subH + 2)
+                .attr("rx", 3).attr("fill", PAL.panel).attr("opacity", 0);
+
             grp.append("rect").attr("x", B.x0 - 6).attr("y", yy - 1)
                 .attr("width", B.w + 130).attr("height", B.subH + 2)
                 .attr("fill", "transparent").style("cursor", "pointer")
                 .attr("tabindex", 0).attr("role", "button")
                 .attr("aria-label", "Select " + cellN + " rows, " + name +
                       (bv.byLevels ? ", " + armLv[a] : ""))
+                .on("pointerenter", function () { back.attr("opacity", 1); })
+                .on("pointerleave", function () { back.attr("opacity", 0); })
+                .on("focus", function () { back.attr("opacity", 1); })
+                .on("blur", function () { back.attr("opacity", 0); })
                 .on("click", function () { pickCell(g, a); })
                 .on("keydown", function (ev) {
                   if (ev.key === "Enter" || ev.key === " ") {
@@ -610,7 +736,7 @@ HTMLWidgets.widget({
         var d = agg.denom[a];
         p = " (" + (d > 0 ? (total / d * 100).toFixed(1) : "0.0") + "%)";
       }
-      return (has ? hit + " / " + total : String(total)) + p;
+      return (has ? fmtN(hit) + " / " + fmtN(total) : fmtN(total)) + p;
     }
 
     // ---- histogram -------------------------------------------------------
@@ -897,7 +1023,8 @@ HTMLWidgets.widget({
           : "All " + st.n + " rows");
       }
 
-      vSel.text((st.has ? st.selCount : st.n) + " / " + st.n).style("color", PAL.select);
+      vSel.text(fmtN(st.has ? st.selCount : st.n) + " / " + fmtN(st.n))
+          .style("color", PAL.select);
       vSrc.text(st.source);
       vMs.text((performance.now() - t0).toFixed(1) + " ms");
     }
