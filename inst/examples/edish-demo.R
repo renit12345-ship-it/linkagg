@@ -4,7 +4,10 @@
 # Run it with:  source(system.file("examples/edish-demo.R", package = "linkagg"))
 
 # Works whether linkagg is installed or loaded with devtools::load_all().
-if (!"linkagg" %in% loadedNamespaces()) library(linkagg)
+# This tests the search path rather than loadedNamespaces(), because a
+# namespace can be loaded without being attached, in which case the exported
+# functions used below would not be findable.
+if (!"package:linkagg" %in% search()) library(linkagg)
 
 set.seed(42)
 n <- 240

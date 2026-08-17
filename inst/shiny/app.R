@@ -7,9 +7,13 @@
 #
 # Launch it with linkagg::run_linkagg_app().
 
-if (!"linkagg" %in% loadedNamespaces()) library(linkagg)
+# Test the search path, not loadedNamespaces(): calling this app through
+# linkagg::run_linkagg_app() loads the namespace without attaching it, so the
+# exported linkaggOutput() and renderLinkagg() would not be findable here.
+# devtools::load_all() attaches too, so this covers the development loop.
+if (!"package:linkagg" %in% search()) library(linkagg)
 library(shiny)
-library(bslib)
+library(bslib, warn.conflicts = FALSE)
 
 set.seed(42)
 n <- 300
