@@ -38,7 +38,7 @@ HTMLWidgets.widget({
       px: null, py: null,
       pv: null, bv: null, hv: null, tv: null,
       barAgg: null, histAgg: null,
-      drillPath: [],
+      drillPath: [], brushRaf: null,
       facets: null, panels: [], brushes: [],
       useCanvas: false, xs: null, ys: null,
       VB: { w: 1180, h: 560 },
@@ -1091,7 +1091,12 @@ HTMLWidgets.widget({
     }
 
     // ---- render ----------------------------------------------------------
-    function render() {
+    // `live` is set while a brush is still being dragged. It updates
+    // everything the eye is actually tracking, the marks, the bar fills and
+    // the counts, and defers the two things that are expensive and read as
+    // noise mid-drag: the threads and rebuilding the listing's rows. Both are
+    // drawn once the brush is released.
+    function render(live) {
       var t0 = performance.now();
       if (st.barAgg)  recomputeHits(st.barAgg);
       if (st.histAgg) recomputeHits(st.histAgg);
@@ -1153,12 +1158,18 @@ HTMLWidgets.widget({
         }
       }
 
-      drawThreads();
+      if (!live) drawThreads();
 
       if (st.tv && st.tbody) {
         var tv = st.tv, cap = one(tv.maxRows) || 400, cols = arr(tv.cols);
         var shown = st.has ? st.selCount : st.n;
         var html = "", cnt = 0;
+        if (live) {
+          st.tableNote.text(st.has
+            ? fmtN(shown) + " rows selected" +
+              (shown > cap ? ", first " + fmtN(cap) + " shown" : "")
+            : "All " + fmtN(st.n) + " rows");
+        } else {
         for (var i = 0; i < st.n && cnt < cap; i++) {
           if (st.has && i >= st.selCount) break;
           var ix = st.has ? st.selIdx[i] : i;
@@ -1173,8 +1184,10 @@ HTMLWidgets.widget({
         }
         st.tbody.node().innerHTML = html;
         st.tableNote.text(st.has
-          ? shown + " rows selected" + (shown > cap ? ", first " + cap + " shown" : "")
-          : "All " + st.n + " rows");
+          ? fmtN(shown) + " rows selected" +
+            (shown > cap ? ", first " + fmtN(cap) + " shown" : "")
+          : "All " + fmtN(st.n) + " rows");
+        }
       }
 
       vSel.text(fmtN(st.has ? st.selCount : st.n) + " / " + fmtN(st.n))
@@ -1184,6 +1197,16 @@ HTMLWidgets.widget({
     }
 
     // ---- brushes, one per facet panel ------------------------------------
+    function applyBrush(p, s, live) {
+      var x0 = s[0][0], y0 = s[0][1], x1 = s[1][0], y1 = s[1][1];
+      var px = st.px, py = st.py, fi = st.facets ? st.facets.index : null;
+      setMaskFromPredicate(function (i) {
+        if (fi && fi[i] !== p.f) return false;
+        return px[i] >= x0 && px[i] <= x1 && py[i] >= y0 && py[i] <= y1;
+      }, "brushed region" + (st.facets ? " \u00b7 " + panelLabel(p.f) : ""));
+      render(live);
+    }
+
     function installBrushes() {
       gBrush.selectAll("*").remove();
       st.brushes = [];
@@ -1197,16 +1220,26 @@ HTMLWidgets.widget({
                 if (o.id !== id) gBrush.select("#" + o.id).call(o.brush.move, null);
               });
             })
-            .on("end", function (ev) {
-              if (!ev.selection) return;
+            // Resolve the selection while the box is still being dragged, so
+            // the aggregates track the pointer instead of waiting for the
+            // mouse to come up. Coalesced to one update per animation frame:
+            // a drag emits far more events than a figure can usefully redraw.
+            .on("brush", function (ev) {
+              if (!ev.selection || !ev.sourceEvent) return;
               var s = ev.selection;
-              var x0 = s[0][0], y0 = s[0][1], x1 = s[1][0], y1 = s[1][1];
-              var px = st.px, py = st.py, fi = st.facets ? st.facets.index : null;
-              setMaskFromPredicate(function (i) {
-                if (fi && fi[i] !== p.f) return false;
-                return px[i] >= x0 && px[i] <= x1 && py[i] >= y0 && py[i] <= y1;
-              }, "brushed region" + (st.facets ? " \u00b7 " + panelLabel(p.f) : ""));
-              render(); pushShiny();
+              if (st.brushRaf) return;
+              st.brushRaf = requestAnimationFrame(function () {
+                st.brushRaf = null;
+                applyBrush(p, s, true);
+              });
+            })
+            .on("end", function (ev) {
+              if (st.brushRaf) {
+                cancelAnimationFrame(st.brushRaf); st.brushRaf = null;
+              }
+              if (!ev.selection) return;
+              applyBrush(p, ev.selection, false);
+              pushShiny();
             });
         var g = gBrush.append("g").attr("id", id).call(b);
         g.selectAll(".selection")

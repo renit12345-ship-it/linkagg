@@ -18,11 +18,12 @@ emailed, archived, and opened offline in five years like a static one.
 
 *Real CDISC pilot data, recorded from the figure itself.*
 
-*Hover a mark and it names the subject. Drag a box and the listing underneath
-narrows to exactly those patients while every bar fills to the share of its own
-subjects caught, per arm. Click a bar rather than its label and the traffic runs
-the other way: that bar's subjects light up in the scatter and the listing
-becomes them. Click a bar's label instead and it walks down the MedDRA
+*Hover a mark and it names the subject. Then drag, and keep dragging: the bars,
+the counts and the listing underneath all track the box while it moves, so you
+can sweep a region and watch which organ classes respond rather than guess,
+release, and guess again. Click a bar rather than its label and the traffic
+runs the other way, that bar's own subjects lighting up in the scatter and
+becoming the listing. Click a bar's label instead and it walks down the MedDRA
 hierarchy, organ class to preferred term to the term the investigator wrote,
 with the breadcrumb walking back up.*
 
@@ -332,6 +333,15 @@ and the redraw the browser reports after a brush.
 
 A million subjects redraw in about a tenth of a second, so drawing is no
 longer what limits the size of a figure.
+
+A brush resolves while it is still being dragged, coalesced to one update per
+animation frame, and the cost of each of those updates is the size of the
+selection rather than of the dataset. On a million subjects, sweeping out a
+corner holding seventeen thousand of them updates in around 3 ms per frame.
+Dragging until nearly the whole cohort is inside the box reaches about 180 ms,
+which is the worst case and an odd thing to want. Threads and the listing's
+rows are drawn once the brush is released rather than on every frame, since
+both are expensive and read as noise mid-drag.
 
 What limits it now is the file. The row-level data travels inside the HTML, at
 roughly 60 MB per million subjects, so a million-subject figure is a 61 MB
