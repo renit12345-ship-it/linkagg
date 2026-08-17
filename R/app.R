@@ -16,9 +16,12 @@
 #'
 #' @export
 run_linkagg_app <- function(...) {
-  if (!requireNamespace("shiny", quietly = TRUE)) {
-    stop("The demo app needs shiny. Install it with install.packages(\"shiny\").",
-         call. = FALSE)
+  miss <- Filter(function(p) !requireNamespace(p, quietly = TRUE),
+                 c("shiny", "bslib"))
+  if (length(miss)) {
+    stop("The demo app needs: ", paste(miss, collapse = ", "),
+         ". Install with install.packages(c(\"",
+         paste(miss, collapse = "\", \""), "\")).", call. = FALSE)
   }
   dir <- system.file("shiny", package = "linkagg")
   if (!nzchar(dir)) {

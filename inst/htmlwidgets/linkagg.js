@@ -14,11 +14,14 @@ HTMLWidgets.widget({
   factory: function (el, width, height) {
 
     var PAL = {
-      ground: "#0B1116", panel: "#121C22", rule: "#223038",
-      dim: "#6E8894", text: "#D7E6EC", data: "#47818F",
-      select: "#6FE6FF", zone: "#F0A93C"
+      ground: "#FFFFFF", panel: "#F8FAFC", rule: "#E3E8EF",
+      dim: "#667085", text: "#101828", data: "#64748B",
+      mute: "#CBD5E1", select: "#1D4ED8", zone: "#475467"
     };
-    var ARM_COLS = ["#7C8FA3", "#4FC1D9", "#B98CFF", "#FF9F6E", "#8AD98A", "#F2E06B"];
+    // Arm colours are Okabe-Ito derived: distinguishable under the common
+    // forms of colour blindness, and legible when a figure is printed. The
+    // first is deliberately neutral, since the first arm is usually placebo.
+    var ARM_COLS = ["#7A8794", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#5A4FCF"];
     var reduce = window.matchMedia &&
                  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -47,8 +50,15 @@ HTMLWidgets.widget({
     // ---- DOM -------------------------------------------------------------
     var root = d3.select(el).append("div")
         .style("background", PAL.ground).style("color", PAL.text)
-        .style("font-family", "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace")
-        .style("font-size", "12px");
+        .style("font-family", "-apple-system, BlinkMacSystemFont, \"Segoe UI\", " +
+               "Inter, Roboto, \"Helvetica Neue\", Arial, sans-serif")
+        // Tabular figures keep counts and percentages aligned down a column,
+        // which is the whole reason the old build used a monospace face.
+        .style("font-variant-numeric", "tabular-nums")
+        .style("font-size", "12px")
+        .style("border", "1px solid " + PAL.rule)
+        .style("border-radius", "10px")
+        .style("overflow", "hidden");
     var stage = root.append("div").style("position", "relative");
     var canvas = stage.append("canvas")
         .style("position", "absolute").style("top", 0).style("left", 0)
@@ -72,22 +82,28 @@ HTMLWidgets.widget({
         gBars = svg.append("g"), gTag = svg.append("g"), gBrush = svg.append("g");
 
     var statbar = root.append("div")
-        .style("display", "flex").style("gap", "24px").style("align-items", "baseline")
-        .style("padding", "12px 16px").style("border-top", "1px solid " + PAL.rule);
+        .style("display", "flex").style("gap", "32px").style("align-items", "center")
+        .style("padding", "14px 20px").style("background", PAL.panel)
+        .style("border-top", "1px solid " + PAL.rule);
     function stat(label, big) {
       var d = statbar.append("div");
-      d.append("div").text(label).style("font-size", "9px")
-        .style("letter-spacing", "0.14em").style("text-transform", "uppercase")
-        .style("color", PAL.dim);
-      return d.append("div").style("font-size", big ? "17px" : "13px")
-        .style("font-weight", "600");
+      d.append("div").text(label).style("font-size", "10px")
+        .style("letter-spacing", "0.06em").style("font-weight", "500")
+        .style("margin-bottom", "2px").style("color", PAL.dim);
+      return d.append("div").style("font-size", big ? "20px" : "13px")
+        .style("font-weight", big ? "650" : "500")
+        .style("letter-spacing", big ? "-0.01em" : "0")
+        .style("color", PAL.text);
     }
     var vSel = stat("Selected", true), vSrc = stat("Source"), vMs = stat("Redraw");
-    statbar.append("button").text("CLEAR")
-        .style("margin-left", "auto").style("font", "inherit").style("font-size", "11px")
-        .style("letter-spacing", "0.08em").style("padding", "6px 12px")
-        .style("cursor", "pointer").style("background", "transparent")
+    var clearBtn = statbar.append("button").text("Clear selection")
+        .style("margin-left", "auto").style("font", "inherit").style("font-size", "12px")
+        .style("font-weight", "500").style("padding", "7px 14px")
+        .style("cursor", "pointer").style("background", PAL.ground)
         .style("color", PAL.text).style("border", "1px solid " + PAL.rule)
+        .style("border-radius", "7px").style("transition", "background 120ms ease")
+        .on("mouseenter", function () { d3.select(this).style("background", PAL.panel); })
+        .on("mouseleave", function () { d3.select(this).style("background", PAL.ground); })
         .on("click", function () { clearSel(); });
 
     var tableWrap = root.append("div").style("display", "none");
@@ -233,7 +249,9 @@ HTMLWidgets.widget({
       st.H.top = scatterBottom + 18;
       var leftBottom = st.hv ? st.H.top + st.H.h + 34 : scatterBottom;
 
-      st.VB.h = Math.max(500, Math.max(leftBottom, barsBottom) + 20);
+      // Let content drive the height. The floor is only a sanity bound: a hard
+      // 500 left a dead band under figures that have no histogram.
+      st.VB.h = Math.max(360, Math.max(leftBottom, barsBottom) + 20);
       svg.attr("viewBox", "0 0 " + st.VB.w + " " + st.VB.h);
     }
 
@@ -280,7 +298,7 @@ HTMLWidgets.widget({
           gZone.append("rect").attr("x", Math.max(x0, zx)).attr("y", y0)
               .attr("width", Math.max(0, x0 + pw - Math.max(x0, zx)))
               .attr("height", Math.max(0, Math.min(zy, y0 + ph) - y0))
-              .attr("fill", PAL.zone).attr("fill-opacity", 0.075);
+              .attr("fill", PAL.zone).attr("fill-opacity", 0.055);
           gZone.append("line").attr("x1", zx).attr("x2", zx).attr("y1", y0)
               .attr("y2", y0 + ph).attr("stroke", PAL.zone)
               .attr("stroke-opacity", 0.45).attr("stroke-dasharray", "4 4");
@@ -291,7 +309,7 @@ HTMLWidgets.widget({
 
         gAxis.append("rect").attr("x", x0).attr("y", y0)
             .attr("width", pw).attr("height", ph)
-            .attr("fill", "none").attr("stroke", "#1E2C33");
+            .attr("fill", "none").attr("stroke", PAL.rule);
 
         ticksFor(xs, pv.xlog, nF > 1 ? 3 : 5).forEach(function (t) {
           if (xs(t) < x0 - 1 || xs(t) > x0 + pw + 1) return;
@@ -328,15 +346,15 @@ HTMLWidgets.widget({
 
       gAxis.append("text").attr("x", SC.l + SC.w / 2).attr("y", SC.t + SC.h + 34)
           .attr("text-anchor", "middle").attr("fill", PAL.dim)
-          .style("font-size", "10px").style("letter-spacing", "0.1em")
+          .style("font-size", "10px").style("letter-spacing", "0.06em")
           .text(String(one(pv.xlab)).toUpperCase());
       gAxis.append("text")
           .attr("transform", "translate(18," + (SC.t + SC.h / 2) + ") rotate(-90)")
           .attr("text-anchor", "middle").attr("fill", PAL.dim)
-          .style("font-size", "10px").style("letter-spacing", "0.1em")
+          .style("font-size", "10px").style("letter-spacing", "0.06em")
           .text(String(one(pv.ylab)).toUpperCase());
       gTag.append("text").attr("x", SC.l).attr("y", 26).attr("fill", PAL.dim)
-          .style("font-size", "10px").style("letter-spacing", "0.16em")
+          .style("font-size", "10px").style("letter-spacing", "0.07em")
           .text("ROW LEVEL \u2014 " + st.n + " ROWS" +
                 (st.facets ? " \u00b7 BY " + String(st.facets.col).toUpperCase() : "") +
                 (st.useCanvas ? " \u00b7 CANVAS" : ""));
@@ -363,20 +381,23 @@ HTMLWidgets.widget({
       ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
       ctx.clearRect(0, 0, st.VB.w, st.VB.h);
       var r = st.n > 40000 ? 0.9 : st.n > 15000 ? 1.2 : 1.7, i;
-      ctx.fillStyle = st.has ? "rgba(51,71,79,0.35)" : "rgba(71,129,143,0.5)";
+      ctx.globalAlpha = st.has ? 0.45 : 0.55;
+      ctx.fillStyle = st.has ? PAL.mute : PAL.data;
       for (i = 0; i < st.n; i++) {
         if (st.has && st.mask[i]) continue;
         if (st.px[i] < -1000) continue;
         ctx.beginPath(); ctx.arc(st.px[i], st.py[i], r, 0, 6.283185); ctx.fill();
       }
       if (st.has) {
-        ctx.fillStyle = "rgba(111,230,255,0.95)";
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = PAL.select;
         for (i = 0; i < st.selCount; i++) {
           var j = st.selIdx[i];
           if (st.px[j] < -1000) continue;
           ctx.beginPath(); ctx.arc(st.px[j], st.py[j], r + 0.5, 0, 6.283185); ctx.fill();
         }
       }
+      ctx.globalAlpha = 1;
     }
 
     // ---- bars, with drill-down -------------------------------------------
@@ -401,7 +422,7 @@ HTMLWidgets.widget({
       var title = "AGGREGATE \u2014 " + String(one(bv.label)).toUpperCase() +
                   (pct ? "  (% OF ARM POPULATION)" : "  (COUNT)");
       gTag.append("text").attr("x", B.x0).attr("y", 26).attr("fill", PAL.dim)
-          .style("font-size", "10px").style("letter-spacing", "0.16em").text(title);
+          .style("font-size", "10px").style("letter-spacing", "0.07em").text(title);
 
       // breadcrumb
       if (bv.drillLevels) {
@@ -430,11 +451,16 @@ HTMLWidgets.widget({
         var off = 0;
         armLv.forEach(function (nm, a) {
           lg.append("rect").attr("x", off).attr("y", -8).attr("width", 9)
-              .attr("height", 9).attr("fill", armColor(a));
-          lg.append("text").attr("x", off + 13).attr("y", 0).attr("fill", PAL.dim)
-              .style("font-size", "9.5px")
+              .attr("height", 9).attr("fill", armColor(a)).attr("rx", 2);
+          var t = lg.append("text").attr("x", off + 14).attr("y", 0).attr("fill", PAL.dim)
+              .style("font-size", "10px")
               .text(nm + (pct && agg.denom ? " (N=" + agg.denom[a] + ")" : ""));
-          off += 13 + String(nm).length * 5.6 + 30;
+          // Measure the rendered label. The face is proportional, so guessing
+          // a per-character width overlaps the next swatch.
+          var tw;
+          try { tw = t.node().getComputedTextLength(); } catch (e) { tw = 0; }
+          if (!tw) tw = String(nm).length * 6.2;
+          off += 14 + tw + 24;
         });
       }
 
@@ -463,13 +489,16 @@ HTMLWidgets.widget({
             var colr = armColor(a);
 
             grp.append("rect").attr("x", B.x0).attr("y", yy).attr("width", len)
-                .attr("height", B.subH).attr("fill", colr).attr("fill-opacity", 0.22);
+                .attr("height", B.subH).attr("fill", colr).attr("fill-opacity", 0.34)
+                .attr("rx", 2);
+            // The selected share. On a light ground this reads as solid colour
+            // against a tinted track, so it needs no glow to separate it.
             var fill = grp.append("rect").attr("x", B.x0).attr("y", yy)
                 .attr("width", 0).attr("height", B.subH).attr("fill", colr)
-                .attr("filter", "url(#lk-bloom-" + el.id + ")");
+                .attr("rx", 2);
             var men = grp.append("line").attr("x1", B.x0).attr("x2", B.x0)
                 .attr("y1", yy - 2).attr("y2", yy + B.subH + 2)
-                .attr("stroke", "#EAFBFF").attr("stroke-width", 1.4).attr("opacity", 0);
+                .attr("stroke", PAL.text).attr("stroke-width", 1.4).attr("opacity", 0);
             var txt = grp.append("text").attr("x", B.x0 + B.w + 10)
                 .attr("y", yy + B.subH - 2).attr("fill", PAL.dim)
                 .style("font-size", "9.5px").text(cellText(agg, cellN, 0, a, false));
@@ -522,9 +551,9 @@ HTMLWidgets.widget({
       var ys = d3.scaleLinear().domain([0, maxV || 1]).range([top + h, top]);
 
       gHist.append("line").attr("x1", x0).attr("x2", x0 + w)
-          .attr("y1", top + h).attr("y2", top + h).attr("stroke", "#2E4049");
+          .attr("y1", top + h).attr("y2", top + h).attr("stroke", PAL.rule);
       gTag.append("text").attr("x", x0).attr("y", top - 8).attr("fill", PAL.dim)
-          .style("font-size", "10px").style("letter-spacing", "0.16em")
+          .style("font-size", "10px").style("letter-spacing", "0.07em")
           .text("AGGREGATE \u2014 " + String(one(hv.label)).toUpperCase() +
                 (one(hv.log) ? " (LOG10)" : "") + " \u00b7 " + nB + " BINS");
 
@@ -542,7 +571,7 @@ HTMLWidgets.widget({
 
             gHist.append("rect").attr("x", bx).attr("y", topY)
                 .attr("width", Math.max(0.6, colW - 0.6)).attr("height", fullH)
-                .attr("fill", colr).attr("fill-opacity", 0.22);
+                .attr("fill", colr).attr("fill-opacity", 0.34);
             var fill = gHist.append("rect").attr("x", bx).attr("y", top + h)
                 .attr("width", Math.max(0.6, colW - 0.6)).attr("height", 0)
                 .attr("fill", colr).attr("filter", "url(#lk-bloom-" + el.id + ")");
@@ -689,7 +718,7 @@ HTMLWidgets.widget({
       else if (st.ptSel) {
         var mask = st.mask, has = st.has;
         st.ptSel.attr("fill", function (i) {
-              return !has ? PAL.data : (mask[i] ? PAL.select : "#33474F");
+              return !has ? PAL.data : (mask[i] ? PAL.select : PAL.mute);
             })
             .attr("fill-opacity", function (i) {
               return !has ? 0.5 : (mask[i] ? 0.95 : 0.18);
@@ -738,7 +767,7 @@ HTMLWidgets.widget({
           for (var c = 0; c < cols.length; c++) {
             var v = arr(st.x.cols[cols[c]])[ix];
             if (typeof v === "number") v = (Math.round(v) === v) ? v : v.toFixed(2);
-            html += '<td style="padding:5px 16px;border-bottom:1px solid rgba(34,48,56,.6)">' +
+            html += '<td style="padding:5px 16px;border-bottom:1px solid ' + PAL.rule + '">' +
                     (v === null || v === undefined ? "" : v) + "</td>";
           }
           html += "</tr>"; cnt++;
@@ -803,7 +832,7 @@ HTMLWidgets.widget({
         thr.append("th").text(lab).style("position", "sticky").style("top", "0")
             .style("background", PAL.ground).style("text-align", "left")
             .style("font-weight", "500").style("font-size", "9.5px")
-            .style("letter-spacing", "0.12em").style("text-transform", "uppercase")
+            .style("letter-spacing", "0.06em").style("text-transform", "uppercase")
             .style("color", PAL.dim).style("padding", "8px 16px")
             .style("border-bottom", "1px solid " + PAL.rule);
       });
@@ -863,6 +892,12 @@ HTMLWidgets.widget({
         lines.forEach(function (t) { footer.append("div").text(t); });
 
         render();
+
+        // The figure is content-sized: its height follows the layout and the
+        // rendered width, neither of which R can know when it picks a height.
+        // Letting the container hug the content avoids a dead band whenever
+        // that estimate overshoots.
+        el.style.height = "auto";
       },
 
       resize: function (w, h) { if (st.useCanvas) paintCanvas(); }

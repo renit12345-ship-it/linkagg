@@ -43,9 +43,12 @@ check_cols <- function(spec, cols) {
 #' @param points Renderer for the row-level display: `"auto"` switches to
 #'   canvas above `canvas_threshold` rows, `"svg"` and `"canvas"` force one.
 #' @param canvas_threshold Row count above which `"auto"` uses canvas.
-#' @param palette Named list of colours. Recognised names: `ground`, `panel`,
-#'   `data`, `select`, `zone`, `text`, `dim`, `rule`, and `arms` for a vector
-#'   of one colour per treatment arm.
+#' @param palette Named list of colours overriding the default light theme.
+#'   Recognised names: `ground`, `panel`, `data`, `select`, `zone`, `text`,
+#'   `dim`, `rule`, `mute` for marks outside the selection, and `arms` for a
+#'   vector of one colour per treatment arm. Arm colours default to an
+#'   Okabe-Ito derived set that survives colour blindness and greyscale
+#'   printing, with a neutral first colour for placebo.
 #'
 #' @return An object of class `linkagg_spec`.
 #'

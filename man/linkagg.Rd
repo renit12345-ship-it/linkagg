@@ -34,9 +34,12 @@ canvas above \code{canvas_threshold} rows, \code{"svg"} and \code{"canvas"} forc
 
 \item{canvas_threshold}{Row count above which \code{"auto"} uses canvas.}
 
-\item{palette}{Named list of colours. Recognised names: \code{ground}, \code{panel},
-\code{data}, \code{select}, \code{zone}, \code{text}, \code{dim}, \code{rule}, and \code{arms} for a vector
-of one colour per treatment arm.}
+\item{palette}{Named list of colours overriding the default light theme.
+Recognised names: \code{ground}, \code{panel}, \code{data}, \code{select}, \code{zone}, \code{text},
+\code{dim}, \code{rule}, \code{mute} for marks outside the selection, and \code{arms} for a
+vector of one colour per treatment arm. Arm colours default to an
+Okabe-Ito derived set that survives colour blindness and greyscale
+printing, with a neutral first colour for placebo.}
 }
 \value{
 An object of class \code{linkagg_spec}.
