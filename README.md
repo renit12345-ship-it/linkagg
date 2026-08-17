@@ -177,6 +177,17 @@ server <- function(input, output) {
 The current selection arrives as `input$<outputId>_selected`, a character
 vector of key values, or `NULL` when nothing is selected.
 
+For a working app that reads the selection back and summarises it in R:
+
+```r
+linkagg::run_linkagg_app()
+```
+
+One gotcha: `linkaggOutput(height = )` does not resize the figure, it only
+sizes the container. If the figure is taller than the container it overlaps
+whatever follows. Match the two by ending the pipe with an explicit
+`as_linkagg_widget(height = 800)` and setting the same value on the output.
+
 ## Threads
 
 By default, selecting rows draws animated threads from each selected row to
@@ -191,7 +202,7 @@ Threads are capped (`thread_cap`) and are suppressed when the browser reports
 - Drill-down is one level deep, so SOC to PT but not HLT in between
 - No boxplots, no time-to-onset displays
 - Above roughly 100,000 rows, drawing rather than arithmetic becomes the limit
-- Never run under R by its author's own admission: no `R CMD check` yet
+- Never used on a real study: no clinical adopter, no real-data shakeout
 - Not validated for any regulated use
 
 ## Licence
