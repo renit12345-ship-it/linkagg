@@ -40,8 +40,21 @@ pts <- list(
   "Gastrointestinal disorders" = c("Nausea", "Diarrhoea", "Vomiting"),
   "Skin and subcutaneous tissue disorders" = c("Rash", "Pruritus", "Urticaria")
 )
+llts <- list(
+  Nausea = c("Feeling sick", "Nausea"), Diarrhoea = c("Loose stools", "Diarrhoea"),
+  Vomiting = c("Vomiting", "Being sick"),
+  Headache = c("Headache", "Head pain"), Dizziness = c("Dizzy", "Dizziness"),
+  Rash = c("Rash", "Skin rash"), Pruritus = c("Itching", "Pruritus"),
+  Urticaria = c("Hives", "Urticaria"),
+  Hyperbilirubinaemia = c("High bilirubin", "Hyperbilirubinaemia"),
+  Cholestasis = c("Cholestasis"), Hepatitis = c("Hepatitis"),
+  "ALT increased" = c("ALT raised", "ALT increased"),
+  "AST increased" = c("AST raised", "AST increased"),
+  "Blood bilirubin increased" = c("Bilirubin raised", "Blood bilirubin increased")
+)
 soc_col <- vector("list", n)
 pt_col <- vector("list", n)
+llt_col <- vector("list", n)
 for (i in seq_len(n)) {
   s <- sample(socs, sample(0:3, 1))
   p <- if (!length(s)) character(0)
@@ -57,9 +70,14 @@ for (i in seq_len(n)) {
   }
   soc_col[[i]] <- s
   pt_col[[i]] <- p
+  # The reported term, paired positionally with the preferred term above it.
+  llt_col[[i]] <- if (!length(p)) character(0)
+                  else vapply(p, function(z) sample(llts[[z]], 1),
+                              character(1), USE.NAMES = FALSE)
 }
 adsl$SOC <- soc_col
 adsl$PT <- pt_col
+adsl$LLT <- llt_col
 
 # System fonts only. A web font would need a network call, which defeats the
 # offline-forever claim the package is built around.
@@ -147,6 +165,16 @@ ui <- page_sidebar(
                  selected = "population"),
     checkboxInput("threads", "Draw threads to bars", TRUE),
     hr(),
+    # Every display is an optional step in the pipeline, so the sidebar can
+    # add and drop them and the figure relays itself around what is left.
+    checkboxGroupInput(
+      "shows", "Displays",
+      c("Histogram of ALT" = "hist",
+        "Volcano of preferred terms" = "volcano",
+        "Subject listing" = "table"),
+      selected = c("hist", "volcano", "table")
+    ),
+    hr(),
     downloadButton("dl", "Download selection (CSV)",
                    class = "btn-sm btn-outline-primary w-100"),
     p(textOutput("dl_note", inline = TRUE),
@@ -160,12 +188,13 @@ ui <- page_sidebar(
       "Drag a box inside any panel, then take hold of the box and slide it: ",
       "the bars and the counts follow it while it moves. Click a bar to select ",
       "that bar's own subjects, or click its label to drill from organ class ",
-      "into preferred term. The volcano under the scatter puts one point per ",
+      "into preferred term and again into the reported term. Every display ",
+      "under the scatter answers to the same selection. The volcano puts one point per ",
       "preferred term at its risk difference against placebo, and fills the ",
       "same way. Everything below the figure is computed in R from ",
       tags$code("input$fig_selected"), "."),
 
-    linkaggOutput("fig", height = "1000px"),
+    linkaggOutput("fig", height = "1250px"),
 
     layout_columns(
       col_widths = c(3, 3, 3, 3),
@@ -230,11 +259,26 @@ server <- function(input, output, session) {
       zone = list(x = 2, y = 3, label = "Hy's law")
     )
 
-    spec |>
-      view_bars(SOC, by = ARM, drill = PT, denominator = input$denom) |>
-      view_volcano(PT, by = ARM, ref = "Placebo", comp = "Drug A 100mg",
-                   min_n = 5L, label = "Preferred term") |>
-      as_linkagg_widget(height = 1000)
+    spec <- view_bars(spec, SOC, by = ARM, drill = c(PT, LLT),
+                      denominator = input$denom)
+
+    shows <- input$shows
+    if ("hist" %in% shows) {
+      spec <- view_hist(spec, ALT, bins = 24, by = ARM, log = TRUE,
+                        label = "Peak ALT")
+    }
+    if ("volcano" %in% shows) {
+      spec <- view_volcano(spec, PT, by = ARM, ref = "Placebo",
+                           comp = "Drug A 100mg", min_n = 5L,
+                           label = "Preferred term")
+    }
+    if ("table" %in% shows) {
+      spec <- view_table(spec, cols = c("USUBJID", "ARM", "SEX", "ALT", "TBILI"),
+                         max_rows = 200L)
+    }
+    # The figure sizes itself to whatever it ended up holding; this is the
+    # space reserved for it before it has been drawn.
+    as_linkagg_widget(spec, height = 1250)
   })
 
   sel_df <- reactive({

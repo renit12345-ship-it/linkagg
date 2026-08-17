@@ -38,7 +38,7 @@ HTMLWidgets.widget({
       px: null, py: null,
       pv: null, bv: null, hv: null, tv: null,
       barAgg: null, histAgg: null,
-      drillPath: [], brushRaf: null,
+      drillPath: [], brushRaf: null, shinyTimer: null,
       facets: null, panels: [], brushes: [],
       useCanvas: false, xs: null, ys: null,
       VB: { w: 1180, h: 560 },
@@ -1027,6 +1027,17 @@ HTMLWidgets.widget({
       drawVolcano();
       render();
     }
+    // While a brush is being dragged the figure updates every frame, but R
+    // only heard about it on release, so an app could show its own count
+    // disagreeing with the figure's for as long as the drag lasted. This
+    // keeps R roughly in step without sending it a message per frame.
+    function pushShinyLive() {
+      if (st.shinyTimer) return;
+      st.shinyTimer = setTimeout(function () {
+        st.shinyTimer = null;
+        pushShiny();
+      }, 200);
+    }
     function pushShiny() {
       if (!HTMLWidgets.shinyMode || !window.Shiny) return;
       var keys = null;
@@ -1200,6 +1211,7 @@ HTMLWidgets.widget({
         return px[i] >= x0 && px[i] <= x1 && py[i] >= y0 && py[i] <= y1;
       }, "brushed region" + (st.facets ? " \u00b7 " + panelLabel(p.f) : ""));
       render(live);
+      if (live) pushShinyLive();
     }
 
     function installBrushes() {
@@ -1231,6 +1243,9 @@ HTMLWidgets.widget({
             .on("end", function (ev) {
               if (st.brushRaf) {
                 cancelAnimationFrame(st.brushRaf); st.brushRaf = null;
+              }
+              if (st.shinyTimer) {
+                clearTimeout(st.shinyTimer); st.shinyTimer = null;
               }
               if (!ev.selection) return;
               applyBrush(p, ev.selection, false);

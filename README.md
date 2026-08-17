@@ -90,9 +90,13 @@ the figure is computed from it: the summary cards, the arm by sex crosstab,
 and a CSV export of exactly the subjects selected. Those last two sit below
 the fold on a shorter window, so scroll if you do not see them.
 
-Inside the figure the bars behave as they do anywhere else: click one to
-select its own subjects, or click its label to drill from organ class into
-preferred term and back out again.
+The figure carries every display the package offers: the panel grid, the
+histogram, the bars with their arm splits and denominators, the volcano, and
+the subject listing. Each is an optional step in the pipeline, so the sidebar
+can add and drop them and the figure relays itself around what is left. The
+bars behave as they do anywhere else: click one to select its own subjects, or
+click its label to walk down from organ class to preferred term to the
+reported term, and back out again.
 
 In the shot above, one cell of the grid is brushed, so the selection is the 44
 male placebo subjects; the source line names the cell, each bar reports the
