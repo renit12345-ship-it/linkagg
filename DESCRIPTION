@@ -1,6 +1,6 @@
 Package: linkagg
 Title: Linked Selection Across Aggregate Views
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: c(
     person("Renit", "Anthony", email = "renit12345@gmail.com",
            role = c("aut", "cre")),
@@ -9,9 +9,10 @@ Authors@R: c(
     )
 Description: Brush a row-level display and see aggregate displays fill in
     proportion to the rows selected, with the row-to-group mapping retained.
-    Aggregate views such as bar charts summarise many rows into one mark, and
-    existing linked-brushing tools in R support only views of individual data
-    points. Output is an 'htmlwidget' that works inside 'shiny' or as a single
+    Aggregate views such as bar charts summarise many rows into one mark, so
+    a selection made on individual rows is resolved back through the row to
+    group mapping to fill each mark partially. Output is an 'htmlwidget' that
+    works inside 'shiny' or as a single
     self-contained HTML file with no server, so an interactive figure can be
     archived or shared like a static one.
 License: MIT + file LICENSE
