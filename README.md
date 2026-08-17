@@ -3,12 +3,37 @@
 Brush a row-level display and watch aggregate displays fill in proportion to
 the rows you selected.
 
-Aggregate views such as bar charts summarise many rows into one mark. Existing
-linked-brushing tools in R support only views of individual data points, and
-crosstalk's authoring guide says partially highlighting a bar from a linked
-selection is "not impossible" but unexplored, and advises steering clear.
-`linkagg` keeps hold of the row-to-group mapping, so it can fill a bar
-partially and draw the threads that produced the fill.
+Aggregate views such as bar charts summarise many rows into one mark.
+`linkagg` keeps hold of the row-to-group mapping, so a selection made on
+individual rows resolves back through it and each mark fills to the share of
+its own rows selected.
+
+## Prior art
+
+The technique is not new. It is usually called **proportional brushing**, and
+Tableau does it with set actions, Vega-Lite ships a layered
+[crossfilter-highlight example](https://vega.github.io/vega-lite/examples/interactive_layered_crossfilter.html)
+that layers all the data under a filtered copy of it, and glue does it
+in Python. Any of those is a reasonable choice, and in R the same Vega-Lite
+spec can be rendered through `vegawidget` or `altair`.
+
+What is missing is not the technique but a version of it shaped for
+subject-level clinical safety data. `crosstalk`, the standard way of linking R
+htmlwidgets, states plainly that it does not cover aggregate views and
+[advises authors to steer clear](https://rstudio.github.io/crosstalk/authoring.html).
+`clinDataReview` and `safetyGraphics` link a bar to the subjects behind it but
+show which subjects, not what share of the bar a selection covers, and both
+want a server.
+
+So the case for this package is narrow and practical:
+
+- a subject can belong to many groups at once, which is the normal shape of
+  adverse event data and awkward to express as one rectangular table
+- a bar is a percentage of its arm's analysis population, not of whatever the
+  selection left behind
+- the hierarchy is walkable, organ class to preferred term to reported term
+- it is four lines of R rather than an authored Vega specification, and it
+  stays interactive at a million subjects
 
 Output is an htmlwidget. It works inside Shiny, and it saves to a single
 self-contained HTML file with no server, so an interactive figure can be
