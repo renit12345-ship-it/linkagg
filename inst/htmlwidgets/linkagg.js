@@ -1300,15 +1300,22 @@ HTMLWidgets.widget({
           .attr("stroke", PAL.dim).attr("stroke-opacity", 0.5)
           .attr("stroke-dasharray", "3 3");
       var aLev = one(vv.alpha) || 0.05;
+      var alphaBox = null;
       var yA = ys(-Math.log10(aLev));
       if (yA > V.top && yA < V.top + V.h) {
         gVol.append("line").attr("x1", V.x0).attr("x2", V.x0 + V.w)
             .attr("y1", yA).attr("y2", yA)
             .attr("stroke", PAL.zone).attr("stroke-opacity", 0.55)
             .attr("stroke-dasharray", "4 4");
-        gVol.append("text").attr("x", V.x0 + V.w - 3).attr("y", yA - 4)
+        var aTxt = gVol.append("text").attr("x", V.x0 + V.w - 3).attr("y", yA - 4)
             .attr("text-anchor", "end").attr("fill", PAL.zone)
             .style("font-size", "9px").text("p = " + aLev);
+        // The significance label is a fixed piece of furniture, so term labels
+        // have to avoid it the same way they avoid each other.
+        var aw;
+        try { aw = aTxt.node().getComputedTextLength(); } catch (e) { aw = 34; }
+        alphaBox = { x0: V.x0 + V.w - 3 - (aw || 34) - 4, x1: V.x0 + V.w,
+                     y0: yA - 14, y1: yA };
       }
 
       xs.ticks(6).forEach(function (t) {
@@ -1383,7 +1390,7 @@ HTMLWidgets.widget({
       var byIx = {};
       st.vpts.forEach(function (p) { byIx[p.t] = p; });
       var order = d3.range(nL).sort(function (a, b) { return ylog[b] - ylog[a]; });
-      var boxes = [];
+      var boxes = alphaBox ? [alphaBox] : [];
       order.slice(0, 8).forEach(function (t) {
         var p = byIx[t];
         if (!p) return;

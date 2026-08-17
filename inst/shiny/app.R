@@ -44,10 +44,19 @@ soc_col <- vector("list", n)
 pt_col <- vector("list", n)
 for (i in seq_len(n)) {
   s <- sample(socs, sample(0:3, 1))
+  p <- if (!length(s)) character(0)
+       else vapply(s, function(z) sample(pts[[z]], 1), character(1),
+                   USE.NAMES = FALSE)
+  # A deliberate dose effect on two terms, so the volcano has something real
+  # to separate rather than noise. Everything else is background.
+  if (adsl$ARM[i] == "Drug A 100mg") {
+    if (runif(1) < 0.22) { s <- c(s, "Skin and subcutaneous tissue disorders")
+                           p <- c(p, "Pruritus") }
+    if (runif(1) < 0.15) { s <- c(s, "Gastrointestinal disorders")
+                           p <- c(p, "Nausea") }
+  }
   soc_col[[i]] <- s
-  pt_col[[i]] <- if (!length(s)) character(0)
-                 else vapply(s, function(z) sample(pts[[z]], 1), character(1),
-                             USE.NAMES = FALSE)
+  pt_col[[i]] <- p
 }
 adsl$SOC <- soc_col
 adsl$PT <- pt_col
@@ -151,10 +160,12 @@ ui <- page_sidebar(
       "Drag a box inside any panel, then take hold of the box and slide it: ",
       "the bars and the counts follow it while it moves. Click a bar to select ",
       "that bar's own subjects, or click its label to drill from organ class ",
-      "into preferred term. Everything below the figure is computed in R from ",
+      "into preferred term. The volcano under the scatter puts one point per ",
+      "preferred term at its risk difference against placebo, and fills the ",
+      "same way. Everything below the figure is computed in R from ",
       tags$code("input$fig_selected"), "."),
 
-    linkaggOutput("fig", height = "760px"),
+    linkaggOutput("fig", height = "1000px"),
 
     layout_columns(
       col_widths = c(3, 3, 3, 3),
@@ -221,7 +232,9 @@ server <- function(input, output, session) {
 
     spec |>
       view_bars(SOC, by = ARM, drill = PT, denominator = input$denom) |>
-      as_linkagg_widget(height = 760)
+      view_volcano(PT, by = ARM, ref = "Placebo", comp = "Drug A 100mg",
+                   min_n = 5L, label = "Preferred term") |>
+      as_linkagg_widget(height = 1000)
   })
 
   sel_df <- reactive({
