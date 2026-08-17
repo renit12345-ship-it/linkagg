@@ -14,6 +14,12 @@ Output is an htmlwidget. It works inside Shiny, and it saves to a single
 self-contained HTML file with no server, so an interactive figure can be
 emailed, archived, and opened offline in five years like a static one.
 
+![A brushed eDISH plot with adverse event bars filling to the share of their own subjects selected](man/figures/linkagg-cdisc.png)
+
+*Real CDISC pilot data. Twenty-two subjects are brushed in the liver corner,
+and every bar reports how many of its own subjects that selection accounts
+for, per arm. The volcano beneath fills the same way.*
+
 ## Status
 
 Early. Not on CRAN. Passes `R CMD check` clean (0 errors, 0 warnings, 0 notes)
@@ -33,11 +39,51 @@ remotes::install_github("renit12345-ship-it/linkagg")
 
 ## Try it
 
+Three worked examples ship with the package. Each opens a figure in the
+RStudio Viewer and leaves its data and the figure behind, under its own names,
+so you can source all three in one session without them treading on each
+other.
+
 ```r
-source(system.file("examples/edish-demo.R", package = "linkagg"))   # simulated
-source(system.file("examples/pbc-trial.R",  package = "linkagg"))   # real trial
-source(system.file("examples/cdisc-adam.R", package = "linkagg"))   # real ADaM
+library(linkagg)
+
+source(system.file("examples/pbc-trial.R",  package = "linkagg"))  # real trial
+source(system.file("examples/cdisc-adam.R", package = "linkagg"))  # real ADaM
+source(system.file("examples/edish-demo.R", package = "linkagg"))  # simulated
 ```
+
+| example | data | leaves behind |
+|---------|------|---------------|
+| `pbc-trial.R`  | Mayo Clinic PBC trial, 312 randomised patients, via `survival` | `pbc_pat`, `fig` |
+| `cdisc-adam.R` | CDISC pilot ADSL / ADAE / ADLB, via `pharmaverseadam` | `cdisc_saf`, `fig` |
+| `edish-demo.R` | simulated, 240 subjects, exercises every display | `demo_adsl`, `fig` |
+
+## The demo app
+
+The package ships a Shiny application that shows the linking working in both
+directions. Run it with one call:
+
+```r
+linkagg::run_linkagg_app()
+```
+
+![The bundled Shiny dashboard, with one cell of a panel grid brushed and the summary computed in R](man/figures/linkagg-app.png)
+
+**Shiny drives the figure.** The sidebar chooses the grid variables, the bar
+denominator and whether threads are drawn, and the figure is rebuilt server
+side.
+
+**The figure drives Shiny.** The brushed selection arrives back in R as
+`input$fig_selected`, a character vector of key values, and everything below
+the figure is computed from it: the summary cards, the arm by sex crosstab,
+and a CSV export of exactly the subjects selected.
+
+In the shot above, one cell of the grid is brushed, so the selection is the 44
+male placebo subjects; the source line names the cell, each bar reports the
+share of its own subjects caught, and the export is ready with those 44.
+
+The application source is `inst/shiny/app.R`, which is worth reading if you
+want to wire the widget into an app of your own.
 
 ## On a real trial
 
@@ -152,6 +198,12 @@ level of `facet_row`.
 view_points(TBILI, ALT, log_x = TRUE, log_y = TRUE,
             facet = ARM, facet_row = SEX)
 ```
+
+![A four by two grid of panels, disease stage across and treatment arm down](man/figures/linkagg-grid.png)
+
+*The PBC trial as a grid: disease stage across, treatment arm down. Every
+panel also carries the whole cohort faintly behind its own patients, so a cell
+can be read against the distribution as a whole and not only against itself.*
 
 Scales stay shared across the whole grid, so every panel is comparable with
 every other, and a brush still selects only the cell you dragged over: the
