@@ -85,7 +85,12 @@ side.
 **The figure drives Shiny.** The brushed selection arrives back in R as
 `input$fig_selected`, a character vector of key values, and everything below
 the figure is computed from it: the summary cards, the arm by sex crosstab,
-and a CSV export of exactly the subjects selected.
+and a CSV export of exactly the subjects selected. Those last two sit below
+the fold on a shorter window, so scroll if you do not see them.
+
+Inside the figure the bars behave as they do anywhere else: click one to
+select its own subjects, or click its label to drill from organ class into
+preferred term and back out again.
 
 In the shot above, one cell of the grid is brushed, so the selection is the 44
 male placebo subjects; the source line names the cell, each bar reports the

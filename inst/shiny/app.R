@@ -31,7 +31,26 @@ adsl <- data.frame(
   TBILI   = exp(rnorm(n, -0.1, 0.8)),
   stringsAsFactors = FALSE
 )
-adsl$SOC <- replicate(n, sample(socs, sample(0:3, 1)), simplify = FALSE)
+# SOC and PT are built together so that element j of PT is the preferred term
+# for element j of SOC. view_bars(drill = ) needs them paired positionally,
+# and that pairing is what lets a bar label be clicked to step down a level.
+pts <- list(
+  "Hepatobiliary disorders" = c("Hyperbilirubinaemia", "Cholestasis", "Hepatitis"),
+  "Investigations" = c("ALT increased", "AST increased", "Blood bilirubin increased"),
+  "Gastrointestinal disorders" = c("Nausea", "Diarrhoea", "Vomiting"),
+  "Skin and subcutaneous tissue disorders" = c("Rash", "Pruritus", "Urticaria")
+)
+soc_col <- vector("list", n)
+pt_col <- vector("list", n)
+for (i in seq_len(n)) {
+  s <- sample(socs, sample(0:3, 1))
+  soc_col[[i]] <- s
+  pt_col[[i]] <- if (!length(s)) character(0)
+                 else vapply(s, function(z) sample(pts[[z]], 1), character(1),
+                             USE.NAMES = FALSE)
+}
+adsl$SOC <- soc_col
+adsl$PT <- pt_col
 
 # System fonts only. A web font would need a network call, which defeats the
 # offline-forever claim the package is built around.
@@ -129,10 +148,11 @@ ui <- page_sidebar(
     p(class = "lk-eyebrow", "linkagg"),
     h1(class = "lk-title", "Linked selection across a panel grid"),
     p(class = "lk-lede",
-      "Drag a box inside any panel. The brush respects both grid dimensions, ",
-      "so it selects only subjects in that column and that row. Each bar then ",
-      "fills to the share of its own rows the selection covers, and everything ",
-      "below is computed in R from ", tags$code("input$fig_selected"), "."),
+      "Drag a box inside any panel, then take hold of the box and slide it: ",
+      "the bars and the counts follow it while it moves. Click a bar to select ",
+      "that bar's own subjects, or click its label to drill from organ class ",
+      "into preferred term. Everything below the figure is computed in R from ",
+      tags$code("input$fig_selected"), "."),
 
     linkaggOutput("fig", height = "760px"),
 
@@ -200,7 +220,7 @@ server <- function(input, output, session) {
     )
 
     spec |>
-      view_bars(SOC, by = ARM, denominator = input$denom) |>
+      view_bars(SOC, by = ARM, drill = PT, denominator = input$denom) |>
       as_linkagg_widget(height = 760)
   })
 
