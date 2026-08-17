@@ -1184,6 +1184,15 @@ HTMLWidgets.widget({
             var hgt = frac * 2 * vp.r;
             anim(vp.clip, dur)
                 .attr("y", vp.cy + vp.r - hgt).attr("height", hgt);
+            // The fill stays strictly proportional, which on a small disc at
+            // a small share is less than a pixel and reads as nothing at all.
+            // The outline carries whether the term is involved; the fill
+            // continues to carry by how much.
+            if (vp.base) {
+              vp.base.attr("stroke", hit > 0 ? PAL.select : PAL.data)
+                  .attr("stroke-opacity", hit > 0 ? 0.95 : 0.55)
+                  .attr("stroke-width", hit > 0 ? 1.6 : 1);
+            }
             if (vp.lab) {
               vp.lab.attr("fill", st.has && hit > 0 ? PAL.text : PAL.dim);
             }
@@ -1380,7 +1389,7 @@ HTMLWidgets.widget({
           var cx = xs(agg.rd[t]), cy = ys(ylog[t]), r = rs(agg.cells[t]);
           var g = gVol.append("g");
 
-          g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", r)
+          var base = g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", r)
               .attr("fill", PAL.data).attr("fill-opacity", 0.16)
               .attr("stroke", PAL.data).attr("stroke-opacity", 0.55);
 
@@ -1412,7 +1421,7 @@ HTMLWidgets.widget({
             "risk difference: " + d3.format("+.1f")(agg.rd[t]) + " pts\n" +
             "p = " + d3.format(".3g")(agg.p[t]));
 
-          st.vpts.push({ t: t, cx: cx, cy: cy, r: r, clip: clip,
+          st.vpts.push({ t: t, cx: cx, cy: cy, r: r, clip: clip, base: base,
                          fill: fill, lab: null, total: agg.cells[t] });
         })(i);
       }

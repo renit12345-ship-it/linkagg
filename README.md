@@ -14,7 +14,7 @@ Output is an htmlwidget. It works inside Shiny, and it saves to a single
 self-contained HTML file with no server, so an interactive figure can be
 emailed, archived, and opened offline in five years like a static one.
 
-![Hovering a point for its subject id, brushing the liver corner so the bars fill, then drilling from organ class to preferred term](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-figure.gif?v=10448c88)
+![Hovering a point for its subject id, brushing the liver corner so the bars fill, then drilling from organ class to preferred term](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-figure.gif?v=8ddac189)
 
 *Real CDISC pilot data, recorded from the figure itself.*
 
@@ -78,7 +78,7 @@ directions. Run it with one call:
 linkagg::run_linkagg_app()
 ```
 
-![Changing the grid variable rebuilds the figure, then brushing one cell updates the cards and crosstab computed in R](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-app.gif?v=b185567c)
+![Changing the grid variable rebuilds the figure, then brushing one cell updates the cards and crosstab computed in R](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-app.gif?v=544853d7)
 
 **Shiny drives the figure.** The sidebar chooses the grid variables, the bar
 denominator and whether threads are drawn, and the figure is rebuilt server
@@ -219,7 +219,7 @@ view_points(TBILI, ALT, log_x = TRUE, log_y = TRUE,
             facet = ARM, facet_row = SEX)
 ```
 
-![A four by two grid of panels, disease stage across and treatment arm down](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-grid.png?v=baf9072c)
+![A four by two grid of panels, disease stage across and treatment arm down](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-grid.png?v=95981304)
 
 *The PBC trial as a grid: disease stage across, treatment arm down. Every
 panel also carries the whole cohort faintly behind its own patients, so a cell
@@ -417,11 +417,11 @@ Threads are capped (`thread_cap`) and are suppressed when the browser reports
 
 The figure on real CDISC data, and the same trial as a panel grid:
 
-![The CDISC figure with a selection active](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-cdisc.png?v=595e93ed)
+![The CDISC figure with a selection active](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-cdisc.png?v=91ce1747)
 
-![The PBC trial as a four by two panel grid](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-grid.png?v=baf9072c)
+![The PBC trial as a four by two panel grid](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-grid.png?v=95981304)
 
-![The bundled Shiny dashboard](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-app.png?v=9df66134)
+![The bundled Shiny dashboard](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-app.png?v=e72df30d)
 
 ## Scope
 
