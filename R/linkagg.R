@@ -294,6 +294,11 @@ resolve_population <- function(population, data, by, by_levels) {
 #'   positionally, so element `j` of `drill[[i]]` is the term for element `j`
 #'   of `group[[i]]`. A length mismatch is an error naming the row, since a
 #'   silent misalignment would file events under the wrong organ class.
+#' @param max_bars Most bars to draw at any one level, largest first. Drilling
+#'   into a system organ class can turn up dozens of preferred terms, most of
+#'   them seen in one or two subjects, and drawing all of them buries the
+#'   terms worth reading. Terms beyond the cap are counted in a note under the
+#'   display rather than dropped silently. Set `Inf` to draw everything.
 #' @param label Display title. Defaults to the column name.
 #'
 #' @return The updated `linkagg_spec`.
@@ -301,7 +306,7 @@ resolve_population <- function(population, data, by, by_levels) {
 view_bars <- function(spec, group, by = NULL, drill = NULL,
                       group_levels = NULL, by_levels = NULL,
                       denominator = c("population", "count"),
-                      population = NULL, label = NULL) {
+                      population = NULL, max_bars = 12L, label = NULL) {
   group <- col_name(substitute(group), parent.frame())
   by_q  <- substitute(by)
   by    <- if (is.null(by_q)) NULL else col_name(by_q, parent.frame())
@@ -401,6 +406,7 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
       membership = unname(membership), armIndex = NULL,
       cellTotals = as.integer(totals), denom = NULL,
       denominator = "count", label = label %||% group,
+      maxBars = if (is.finite(max_bars)) as.integer(max_bars) else -1L,
       drill = drill, drillLevels = drillLevels, drillIdx = drillIdx,
       pairGroup = if (is.null(drill)) NULL else unname(pair_group)
     )
@@ -439,6 +445,7 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
       denom = denom,
       denominator = denominator,
       label = label %||% group,
+      maxBars = if (is.finite(max_bars)) as.integer(max_bars) else -1L,
       drill = drill, drillLevels = drillLevels, drillIdx = drillIdx,
       pairGroup = if (is.null(drill)) NULL else unname(pair_group)
     )

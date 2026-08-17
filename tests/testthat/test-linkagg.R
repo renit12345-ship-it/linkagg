@@ -562,3 +562,19 @@ test_that("subjects reaching a deep term are recoverable from the indices", {
   }, logical(1))
   expect_equal(which(on_path), 1L)      # only s1 had a septal MI
 })
+
+test_that("max_bars is carried to the display and can be switched off", {
+  df <- data.frame(id = sprintf("s%d", 1:30), stringsAsFactors = FALSE)
+  df$g <- as.list(sprintf("term%02d", rep(1:15, each = 2)))
+
+  v <- (linkagg(df, id) |> view_bars(g))$views[[1]]
+  expect_equal(v$maxBars, 12L)          # the default cap
+  expect_length(v$levels, 15L)          # every level is still carried
+
+  v2 <- (linkagg(df, id) |> view_bars(g, max_bars = 4L))$views[[1]]
+  expect_equal(v2$maxBars, 4L)
+  expect_length(v2$levels, 15L)         # capping is a drawing decision only
+
+  v3 <- (linkagg(df, id) |> view_bars(g, max_bars = Inf))$views[[1]]
+  expect_equal(v3$maxBars, -1L)         # -1 means draw everything
+})

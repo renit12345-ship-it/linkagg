@@ -419,7 +419,14 @@ HTMLWidgets.widget({
 
       var pitch = B.labH + (st.barAgg ? st.barAgg.nA : 1) * (B.subH + B.subGap) + B.gap;
       st.rowPitch = pitch;
-      var barsBottom = B.top + (st.barAgg ? st.barAgg.nL : 0) * pitch + 20;
+      var shownBars = 0;
+      if (st.barAgg) {
+        var bcap = st.bv ? one(st.bv.maxBars) : null;
+        if (bcap === null || bcap === undefined || bcap < 0) bcap = st.barAgg.nL;
+        shownBars = Math.min(st.barAgg.nL, bcap);
+        if (shownBars < st.barAgg.nL) shownBars += 0.5;   // room for the note
+      }
+      var barsBottom = B.top + shownBars * pitch + 20;
 
       // A grid of panels needs room to stay readable as rows are added.
       SC.h = fg.nR > 1 ? Math.max(300, 152 * fg.nR) : (nF > 1 ? 300 : 330);
@@ -803,7 +810,13 @@ HTMLWidgets.widget({
         });
       }
 
-      agg.levels.forEach(function (name, g) {
+      // Largest first, capped. A drilled organ class can turn up dozens of
+      // preferred terms, most seen in one or two subjects, and drawing the
+      // whole tail buries the terms worth reading.
+      var cap = one(bv.maxBars);
+      if (cap === null || cap === undefined || cap < 0) cap = agg.nL;
+      var shownL = Math.min(agg.nL, cap);
+      agg.levels.slice(0, shownL).forEach(function (name, g) {
         var top = B.top + g * st.rowPitch;
         var grp = gBars.append("g");
         // A label is a drill target while finer levels remain below it.
@@ -874,6 +887,13 @@ HTMLWidgets.widget({
           })(a);
         }
       });
+
+      if (shownL < agg.nL) {
+        gBars.append("text").attr("x", B.x0)
+            .attr("y", B.top + shownL * st.rowPitch + 4)
+            .attr("fill", PAL.dim).style("font-size", "9.5px")
+            .text(fmtN(agg.nL - shownL) + " further term(s) not shown");
+      }
     }
 
     function cellText(agg, total, hit, a, has) {

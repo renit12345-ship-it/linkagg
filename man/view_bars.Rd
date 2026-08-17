@@ -13,6 +13,7 @@ view_bars(
   by_levels = NULL,
   denominator = c("population", "count"),
   population = NULL,
+  max_bars = 12L,
   label = NULL
 )
 }
@@ -52,6 +53,12 @@ population; \code{"count"} gives raw counts. Defaults to \code{"population"} whe
 which is correct when \code{data} is the analysis population. Otherwise pass a
 named numeric vector such as \code{c(Placebo = 80, "Drug A" = 82)}, or the full
 population data frame to count from.}
+
+\item{max_bars}{Most bars to draw at any one level, largest first. Drilling
+into a system organ class can turn up dozens of preferred terms, most of
+them seen in one or two subjects, and drawing all of them buries the
+terms worth reading. Terms beyond the cap are counted in a note under the
+display rather than dropped silently. Set \code{Inf} to draw everything.}
 
 \item{label}{Display title. Defaults to the column name.}
 }
