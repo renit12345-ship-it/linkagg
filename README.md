@@ -16,10 +16,15 @@ emailed, archived, and opened offline in five years like a static one.
 
 ![Hovering a point for its subject id, brushing the liver corner so the bars fill, then drilling from organ class to preferred term](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-figure.gif)
 
-*Real CDISC pilot data, recorded from the figure itself. Hovering a mark names
-the subject; brushing the liver corner fills every bar and volcano point to the
-share of its own subjects caught; clicking a bar label walks down the MedDRA
-hierarchy, and the breadcrumb walks back up.*
+*Real CDISC pilot data, recorded from the figure itself.*
+
+*Hover a mark and it names the subject. Drag a box and the listing underneath
+narrows to exactly those patients while every bar fills to the share of its own
+subjects caught, per arm. Click a bar rather than its label and the traffic runs
+the other way: that bar's subjects light up in the scatter and the listing
+becomes them. Click a bar's label instead and it walks down the MedDRA
+hierarchy, organ class to preferred term to the term the investigator wrote,
+with the breadcrumb walking back up.*
 
 ## Status
 
