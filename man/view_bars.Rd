@@ -26,11 +26,17 @@ organ classes.}
 
 \item{by}{Optional column giving the treatment arm, one value per row.}
 
-\item{drill}{Optional finer term to drill into, such as preferred term
-below system organ class. Must be shaped like \code{group}: if \code{group} is a
-list-column, \code{drill} must be a list-column whose elements pair up
+\item{drill}{Optional finer terms to drill into, given coarse to fine. One
+column drills a single level, such as preferred term below system organ
+class; several give a hierarchy, \code{drill = c(PT, LLT)} taking system organ
+class to preferred term to lowest level term. Clicking a bar label steps
+down one level and the breadcrumb steps back up, to any depth.
+
+Every drill column must be shaped like \code{group}: if \code{group} is a
+list-column, each must be a list-column whose elements pair up
 positionally, so element \code{j} of \code{drill[[i]]} is the term for element \code{j}
-of \code{group[[i]]}.}
+of \code{group[[i]]}. A length mismatch is an error naming the row, since a
+silent misalignment would file events under the wrong organ class.}
 
 \item{group_levels}{Optional character vector fixing the order of groups.
 Defaults to descending overall count.}

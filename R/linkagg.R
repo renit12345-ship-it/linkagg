@@ -20,6 +20,18 @@ col_name <- function(q, env = parent.frame()) {
   deparse(q)
 }
 
+# Column names for `drill`, which takes one column or several from coarse to
+# fine: a bare name, a string, `c(PT, LLT)`, or `c("PT", "LLT")`.
+drill_names <- function(q, env) {
+  if (is.null(q)) return(NULL)
+  if (is.call(q) && identical(q[[1]], as.name("c"))) {
+    parts <- as.list(q)[-1]
+    return(unlist(lapply(parts, col_name, env = env), use.names = FALSE))
+  }
+  nm <- col_name(q, env)
+  if (is.null(nm)) NULL else as.character(nm)
+}
+
 check_spec <- function(spec) {
   if (!inherits(spec, "linkagg_spec")) {
     stop("Expected a linkagg spec. Start the chain with linkagg().", call. = FALSE)
@@ -271,11 +283,17 @@ resolve_population <- function(population, data, by, by_levels) {
 #'   which is correct when `data` is the analysis population. Otherwise pass a
 #'   named numeric vector such as `c(Placebo = 80, "Drug A" = 82)`, or the full
 #'   population data frame to count from.
-#' @param drill Optional finer term to drill into, such as preferred term
-#'   below system organ class. Must be shaped like `group`: if `group` is a
-#'   list-column, `drill` must be a list-column whose elements pair up
+#' @param drill Optional finer terms to drill into, given coarse to fine. One
+#'   column drills a single level, such as preferred term below system organ
+#'   class; several give a hierarchy, `drill = c(PT, LLT)` taking system organ
+#'   class to preferred term to lowest level term. Clicking a bar label steps
+#'   down one level and the breadcrumb steps back up, to any depth.
+#'
+#'   Every drill column must be shaped like `group`: if `group` is a
+#'   list-column, each must be a list-column whose elements pair up
 #'   positionally, so element `j` of `drill[[i]]` is the term for element `j`
-#'   of `group[[i]]`.
+#'   of `group[[i]]`. A length mismatch is an error naming the row, since a
+#'   silent misalignment would file events under the wrong organ class.
 #' @param label Display title. Defaults to the column name.
 #'
 #' @return The updated `linkagg_spec`.
@@ -288,7 +306,7 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
   by_q  <- substitute(by)
   by    <- if (is.null(by_q)) NULL else col_name(by_q, parent.frame())
   dr_q  <- substitute(drill)
-  drill <- if (is.null(dr_q)) NULL else col_name(dr_q, parent.frame())
+  drill <- drill_names(dr_q, parent.frame())
 
   check_spec(spec)
   check_cols(spec, group)
@@ -335,31 +353,40 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
 
   # Drill terms pair positionally with group entries, and must survive the
   # same NA filtering the group entries went through.
+  # One level set and one index list per drill depth, each aligned entry by
+  # entry with pair_group rather than with the de-duplicated membership.
   drillLevels <- NULL; drillIdx <- NULL
   if (!is.null(drill)) {
-    dcol <- spec$data[[drill]]
-    dvals <- if (is.list(dcol)) {
-      lapply(dcol, function(v) as.character(v))
-    } else {
-      lapply(as.character(dcol), function(v) v)
+    drillLevels <- vector("list", length(drill))
+    drillIdx    <- vector("list", length(drill))
+    for (k in seq_along(drill)) {
+      dcol <- spec$data[[drill[k]]]
+      if (is.list(col) != is.list(dcol)) {
+        stop("`drill` must be shaped like `group`: both list-columns, or ",
+             "neither. `", drill[k], "` is not.", call. = FALSE)
+      }
+      dvals <- if (is.list(dcol)) {
+        lapply(dcol, as.character)
+      } else {
+        lapply(as.character(dcol), function(v) v)
+      }
+      bad <- which(lengths(dvals) != lengths(vals))
+      if (length(bad)) {
+        stop("`drill` and `group` must pair up element by element. ",
+             "Row ", bad[1], " has ", lengths(vals)[bad[1]],
+             " group entries but ", lengths(dvals)[bad[1]], " `",
+             drill[k], "` entries.", call. = FALSE)
+      }
+      lvk <- sort(unique(unlist(dvals, use.names = FALSE)))
+      ix <- Map(function(gv, dv) {
+        keep <- !is.na(match(gv, lv))
+        as.integer(match(dv[keep], lvk) - 1L)
+      }, vals, dvals)
+      drillLevels[[k]] <- as.character(lvk)
+      drillIdx[[k]] <- unname(lapply(ix, function(z) {
+        as.integer(ifelse(is.na(z), -1L, z))
+      }))
     }
-    if (is.list(col) != is.list(dcol)) {
-      stop("`drill` must be shaped like `group`: both list-columns, or neither.",
-           call. = FALSE)
-    }
-    bad <- which(lengths(dvals) != lengths(vals))
-    if (length(bad)) {
-      stop("`drill` and `group` must pair up element by element. ",
-           "Row ", bad[1], " has ", lengths(vals)[bad[1]], " group entries but ",
-           lengths(dvals)[bad[1]], " drill entries.", call. = FALSE)
-    }
-    drillLevels <- sort(unique(unlist(dvals, use.names = FALSE)))
-    drillIdx <- Map(function(gv, dv) {
-      keep <- !is.na(match(gv, lv))
-      as.integer(match(dv[keep], drillLevels) - 1L)
-    }, vals, dvals)
-    # drillIdx pairs with pair_group, not with the de-duplicated membership.
-    drillIdx <- lapply(drillIdx, function(z) as.integer(ifelse(is.na(z), -1L, z)))
   }
 
   nG <- length(lv)
@@ -374,7 +401,7 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
       membership = unname(membership), armIndex = NULL,
       cellTotals = as.integer(totals), denom = NULL,
       denominator = "count", label = label %||% group,
-      drill = drill, drillLevels = drillLevels, drillIdx = unname(drillIdx),
+      drill = drill, drillLevels = drillLevels, drillIdx = drillIdx,
       pairGroup = if (is.null(drill)) NULL else unname(pair_group)
     )
   } else {
@@ -412,7 +439,7 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
       denom = denom,
       denominator = denominator,
       label = label %||% group,
-      drill = drill, drillLevels = drillLevels, drillIdx = unname(drillIdx),
+      drill = drill, drillLevels = drillLevels, drillIdx = drillIdx,
       pairGroup = if (is.null(drill)) NULL else unname(pair_group)
     )
   }

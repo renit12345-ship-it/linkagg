@@ -36,7 +36,7 @@ saf <- saf[is.finite(saf$ALT) & is.finite(saf$TBILI), ]
 # term so a bar counts subjects rather than events.
 ae <- adae[adae$USUBJID %in% saf$USUBJID &
              !is.na(adae$AEBODSYS) & nzchar(adae$AEBODSYS), ]
-ae <- unique(ae[, c("USUBJID", "AEBODSYS", "AEDECOD")])
+ae <- unique(ae[, c("USUBJID", "AEBODSYS", "AEDECOD", "AELLT")])
 
 split_by_subj <- function(col) {
   s <- split(ae[[col]], factor(ae$USUBJID, levels = saf$USUBJID))
@@ -46,6 +46,7 @@ split_by_subj <- function(col) {
 # same de-duplicated frame in the same order.
 saf$SOC <- unname(split_by_subj("AEBODSYS"))
 saf$PT  <- unname(split_by_subj("AEDECOD"))
+saf$LLT <- unname(split_by_subj("AELLT"))
 
 cat("subjects:", nrow(saf), " arms:", nlevels(saf$ARM),
     " AE rows:", nrow(ae), " distinct PT:", length(unique(ae$AEDECOD)), "\n")
@@ -55,7 +56,9 @@ fig <- linkagg(saf, USUBJID) |>
   view_points(TBILI, ALT, log_x = TRUE, log_y = TRUE,
               x_lab = "Peak bilirubin (xULN)", y_lab = "Peak ALT (xULN)",
               zone = list(x = 2, y = 3, label = "Hy's law")) |>
-  view_bars(SOC, by = ARM, drill = PT, label = "System organ class") |>
+  # Real MedDRA hierarchy: organ class to preferred term to the term the
+  # investigator actually reported.
+  view_bars(SOC, by = ARM, drill = c(PT, LLT), label = "System organ class") |>
   view_volcano(PT, by = ARM, ref = "Placebo", comp = "Xanomeline High Dose",
                min_n = 5L, label = "Preferred term") |>
   view_table(cols = c("USUBJID", "ARM", "AGE", "SEX", "ALT", "TBILI")) |>

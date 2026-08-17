@@ -17,7 +17,9 @@ emailed, archived, and opened offline in five years like a static one.
 ## Status
 
 Early. Not on CRAN. Passes `R CMD check` clean (0 errors, 0 warnings, 0 notes)
-on R 4.5.3, with 62 passing tests. Not yet used on a real study.
+on R 4.5.3, with 124 passing tests. Runs on real trial data — see *On a real
+trial* below — but has not yet been used by anyone for a review question of
+their own, and is not validated for regulated use.
 
 The layout is fixed: row-level displays on the left, aggregate displays on the
 right, listing below. Treat this as a working prototype, not a stable API.
@@ -170,19 +172,38 @@ want the variable's value: `by = (arm_col)`.
 
 ## Drill-down
 
-`drill` gives a second level below the grouping, such as preferred term below
-system organ class. Click a group label to descend, click the breadcrumb to
-come back. Arm splits, denominators and partial fills all work the same way at
-the drilled level.
+`drill` gives the levels below the grouping, coarse to fine. Click a bar label
+to descend, click any step of the breadcrumb to come back to that level. Arm
+splits, denominators and partial fills all work the same way at every depth.
 
 ```r
-view_bars(SOC, by = ARM, drill = PT)
+view_bars(SOC, by = ARM, drill = PT)            # one level
+view_bars(SOC, by = ARM, drill = c(PT, LLT))    # the MedDRA hierarchy
 ```
 
-`SOC` and `PT` must pair positionally: element `j` of `PT[[i]]` is the term for
-element `j` of `SOC[[i]]`. Mismatched lengths are an error naming the offending
-row, because a silent misalignment here would attribute events to the wrong
-organ class.
+The second form is the one a safety reviewer actually walks: organ class, to
+preferred term, to the term the investigator wrote down. On the CDISC pilot
+study, `Cardiac disorders > Myocardial infarction` holds 4 placebo, 2 low-dose
+and 4 high-dose subjects, and drilling once more splits that preferred term
+into what was really reported:
+
+| lowest level term              | Placebo | Low | High |
+|--------------------------------|---------|-----|------|
+| Myocardial infarction          | 1       | 1   | 2    |
+| Inferior myocardial infarction | 1       | 0   | 1    |
+| Myocardial infarct             | 2       | 0   | 0    |
+| Anteroseptal infarction        | 0       | 1   | 0    |
+| Septal myocardial infarction   | 0       | 0   | 1    |
+| **total**                      | **4**   | **2** | **4** |
+
+Two of those rows are the same event spelled differently and three are
+anatomically distinct infarctions. A preferred-term table shows one row of
+ten; it cannot show you that.
+
+Every drill column must pair positionally with the group: element `j` of
+`PT[[i]]` is the term for element `j` of `SOC[[i]]`. Mismatched lengths are an
+error naming the offending row and column, because a silent misalignment here
+would attribute events to the wrong organ class.
 
 ## Histograms
 
@@ -314,7 +335,6 @@ Threads are capped (`thread_cap`) and are suppressed when the browser reports
 ## What it does not do yet
 
 - One scatter, one bar display and one histogram per figure
-- Drill-down is one level deep, so SOC to PT but not HLT in between
 - No boxplots, no time-to-onset displays
 - Above roughly 100,000 rows, drawing rather than arithmetic becomes the limit
 - Never used on a real study: no clinical adopter, no real-data shakeout

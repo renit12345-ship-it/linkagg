@@ -38,7 +38,7 @@ HTMLWidgets.widget({
       px: null, py: null,
       pv: null, bv: null, hv: null, tv: null,
       barAgg: null, histAgg: null,
-      drillG: null,
+      drillPath: [],
       facets: null, panels: [], brushes: [],
       useCanvas: false, xs: null, ys: null,
       VB: { w: 1180, h: 560 },
@@ -218,30 +218,52 @@ HTMLWidgets.widget({
     var fmtN = d3.format(",");
 
     // ---- aggregate views reduced to one shape ---------------------------
-    function aggFromBars(bv, drillG) {
+    function aggFromBars(bv, drillPath) {
       var mem, levels, nA, armIndex, cells, i, j;
       armIndex = bv.armIndex ? Int32Array.from(arr(bv.armIndex)) : null;
       nA = bv.byLevels ? arr(bv.byLevels).length : 1;
       var rawMem = arr(bv.membership);
 
-      if (drillG === null || drillG === undefined || !bv.drillLevels) {
+      var path = arr(drillPath);
+      // Maps a displayed row back to its index in the full level set. At the
+      // top these agree, but a drilled display shows only the terms present
+      // under the path, re-sorted by count, so the two diverge — and it is the
+      // full-set index that identifies a term when the path is extended.
+      var globalIx;
+      if (!path.length || !bv.drillLevels) {
         levels = arr(bv.levels).slice();
         mem = new Array(st.n);
         for (i = 0; i < st.n; i++) mem[i] = Int32Array.from(arr(rawMem[i]));
         cells = Int32Array.from(arr(bv.cellTotals));
+        globalIx = d3.range(levels.length);
       } else {
         // Drilled: sub-levels are the drill terms recorded under this group.
         // This path reads pairGroup, which keeps one entry per group/term pair
         // and so stays aligned with drillIdx. bv.membership is de-duplicated
         // for counting and would not line up.
         rawMem = arr(bv.pairGroup);
-        var rawDrill = arr(bv.drillIdx);
-        var dLev = arr(bv.drillLevels);
+        // One index list per drill depth, each aligned entry by entry with
+        // pairGroup. path[0] picks a group, path[1] a term one level down,
+        // and so on; the levels shown are those of depth path.length - 1.
+        var levSets = arr(bv.drillLevels), idxSets = arr(bv.drillIdx);
+        var depth = path.length;
+        var dLev = arr(levSets[depth - 1]);
+
+        // An entry survives when it matches every step of the path taken so
+        // far: the group, then each finer term already chosen.
+        function entryOnPath(i, j) {
+          if (arr(rawMem[i])[j] !== path[0]) return false;
+          for (var q = 1; q < depth; q++) {
+            if (arr(arr(idxSets[q - 1])[i])[j] !== path[q]) return false;
+          }
+          return true;
+        }
+
         var counts = {}, present = [];
         for (i = 0; i < st.n; i++) {
-          var gm = arr(rawMem[i]), dm = arr(rawDrill[i]);
+          var gm = arr(rawMem[i]), dm = arr(arr(idxSets[depth - 1])[i]);
           for (j = 0; j < gm.length; j++) {
-            if (gm[j] !== drillG) continue;
+            if (!entryOnPath(i, j)) continue;
             var d = dm[j];
             if (d < 0) continue;
             if (counts[d] === undefined) { counts[d] = 0; present.push(d); }
@@ -252,12 +274,14 @@ HTMLWidgets.widget({
         var pos = {};
         present.forEach(function (d, ix) { pos[d] = ix; });
         levels = present.map(function (d) { return dLev[d]; });
+        globalIx = present.slice();
 
         mem = new Array(st.n);
         for (i = 0; i < st.n; i++) {
-          var gm2 = arr(rawMem[i]), dm2 = arr(rawDrill[i]), out = [];
+          var gm2 = arr(rawMem[i]), dm2 = arr(arr(idxSets[depth - 1])[i]);
+          var out = [];
           for (j = 0; j < gm2.length; j++) {
-            if (gm2[j] !== drillG) continue;
+            if (!entryOnPath(i, j)) continue;
             var d2 = dm2[j];
             if (d2 >= 0 && pos[d2] !== undefined && out.indexOf(pos[d2]) < 0) {
               out.push(pos[d2]);
@@ -275,7 +299,7 @@ HTMLWidgets.widget({
       }
 
       return {
-        kind: "bars", mem: mem, armIndex: armIndex,
+        kind: "bars", mem: mem, armIndex: armIndex, globalIx: globalIx,
         levels: levels, nL: levels.length, nA: nA,
         cells: cells, denom: bv.denom ? arr(bv.denom) : null,
         denominator: bv.denominator,
@@ -685,24 +709,50 @@ HTMLWidgets.widget({
       gTag.append("text").attr("x", B.x0).attr("y", 26).attr("fill", PAL.dim)
           .style("font-size", "10px").style("letter-spacing", "0.07em").text(title);
 
-      // breadcrumb
+      // Breadcrumb. Every step back up the hierarchy is its own target, so a
+      // reviewer three levels deep can return to any level in one click
+      // rather than stepping back one at a time.
       if (bv.drillLevels) {
         var crumb = gBars.append("g");
-        if (st.drillG === null) {
+        var dNames = arr(bv.drill), dSets = arr(bv.drillLevels);
+        var pathNow = st.drillPath;
+
+        if (!pathNow.length) {
           crumb.append("text").attr("x", B.x0).attr("y", 44).attr("fill", PAL.dim)
               .style("font-size", "10px")
-              .text("click a bar label to drill into " + String(one(bv.drill)));
+              .text("click a bar label to drill into " + String(dNames[0]));
         } else {
-          var back = crumb.append("text").attr("x", B.x0).attr("y", 44)
-              .attr("fill", PAL.select).style("font-size", "10px")
-              .style("cursor", "pointer").attr("tabindex", 0)
-              .text("\u2190 all " + String(one(bv.group)) + "  /  " +
-                    arr(bv.levels)[st.drillG])
-              .on("click", function () { setDrill(null); })
-              .on("keydown", function (ev) {
-                if (ev.key === "Enter") setDrill(null);
-              });
-          back.append("title").text("Back to the full grouping");
+          var cx2 = B.x0;
+          var hop = function (label, toDepth, isLast) {
+            var t = crumb.append("text").attr("x", cx2).attr("y", 44)
+                .style("font-size", "10px")
+                .attr("fill", isLast ? PAL.text : PAL.select)
+                .text(label);
+            if (!isLast) {
+              t.style("cursor", "pointer").attr("tabindex", 0)
+                  .attr("role", "button")
+                  .on("click", function () { setDrill(pathNow.slice(0, toDepth)); })
+                  .on("keydown", function (ev) {
+                    if (ev.key === "Enter") setDrill(pathNow.slice(0, toDepth));
+                  });
+              t.append("title").text("Back to " + label);
+            }
+            var w;
+            try { w = t.node().getComputedTextLength(); } catch (e) { w = 0; }
+            cx2 += (w || String(label).length * 5.2) + 6;
+            if (!isLast) {
+              crumb.append("text").attr("x", cx2).attr("y", 44)
+                  .attr("fill", PAL.dim).style("font-size", "10px").text("/");
+              cx2 += 10;
+            }
+          };
+
+          hop("\u2190 all " + String(one(bv.group)), 0, false);
+          for (var s = 0; s < pathNow.length; s++) {
+            var nm2 = (s === 0) ? arr(bv.levels)[pathNow[0]]
+                                : arr(dSets[s - 1])[pathNow[s]];
+            hop(String(nm2), s + 1, s === pathNow.length - 1);
+          }
         }
       }
 
@@ -728,7 +778,9 @@ HTMLWidgets.widget({
       agg.levels.forEach(function (name, g) {
         var top = B.top + g * st.rowPitch;
         var grp = gBars.append("g");
-        var canDrill = bv.drillLevels && st.drillG === null;
+        // A label is a drill target while finer levels remain below it.
+        var canDrill = bv.drillLevels &&
+                       st.drillPath.length < arr(bv.drillLevels).length;
 
         var lab = grp.append("text").attr("x", B.x0).attr("y", top + 10)
             .attr("fill", canDrill ? PAL.select : PAL.text)
@@ -738,8 +790,10 @@ HTMLWidgets.widget({
         if (canDrill) {
           lab.attr("tabindex", 0).attr("role", "button")
              .attr("aria-label", "Drill into " + name)
-             .on("click", function () { setDrill(g); })
-             .on("keydown", function (ev) { if (ev.key === "Enter") setDrill(g); });
+             .on("click", function () { drillInto(g); })
+             .on("keydown", function (ev) {
+               if (ev.key === "Enter") drillInto(g);
+             });
         }
 
         for (var a = 0; a < nA; a++) {
@@ -929,9 +983,16 @@ HTMLWidgets.widget({
       }, agg.levels[g]);
       clearBrushes(); render(); pushShiny();
     }
-    function setDrill(g) {
-      st.drillG = g;
-      st.barAgg = aggFromBars(st.bv, g);
+    // Step one level down from a displayed row, translating that row back to
+    // its index in the full level set before extending the path.
+    function drillInto(displayIx) {
+      var agg = st.barAgg;
+      var gi = (agg && agg.globalIx) ? agg.globalIx[displayIx] : displayIx;
+      setDrill(st.drillPath.concat([gi]));
+    }
+    function setDrill(path) {
+      st.drillPath = arr(path).slice();
+      st.barAgg = aggFromBars(st.bv, st.drillPath);
       computeLayout();
       drawBars();
       // Drilling changes the bar count, so the volcano band below it moves.
@@ -1325,7 +1386,7 @@ HTMLWidgets.widget({
       renderValue: function (x) {
         st.x = x;
         st.n = one(x.n) || 0;
-        st.has = false; st.selCount = 0; st.source = "none"; st.drillG = null;
+        st.has = false; st.selCount = 0; st.source = "none"; st.drillPath = [];
         st.mask = new Uint8Array(st.n);
         st.selIdx = new Int32Array(st.n);
 
@@ -1354,7 +1415,7 @@ HTMLWidgets.widget({
           index: Int32Array.from(arr(st.pv.facetIndex))
         } : null;
 
-        st.barAgg  = st.bv ? aggFromBars(st.bv, null) : null;
+        st.barAgg  = st.bv ? aggFromBars(st.bv, []) : null;
         st.histAgg = st.hv ? aggFromHist(st.hv) : null;
         st.volAgg  = st.vv ? aggFromVolcano(st.vv) : null;
 

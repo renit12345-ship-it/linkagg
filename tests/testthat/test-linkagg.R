@@ -299,10 +299,10 @@ drill_df <- function() {
 test_that("drill terms pair positionally with group entries", {
   v <- (linkagg(drill_df(), USUBJID) |>
           view_bars(SOC, by = ARM, drill = PT))$views[[1]]
-  expect_equal(sort(v$drillLevels),
+  expect_equal(sort(v$drillLevels[[1]]),
                sort(c("ALT increased", "Jaundice", "Nausea", "Vomiting")))
-  expect_equal(lengths(v$drillIdx), lengths(v$membership))
-  expect_true(all(unlist(v$drillIdx) >= 0))
+  expect_equal(lengths(v$drillIdx[[1]]), lengths(v$pairGroup))
+  expect_true(all(unlist(v$drillIdx[[1]]) >= 0))
 })
 
 test_that("mismatched drill lengths are rejected", {
@@ -487,5 +487,78 @@ test_that("drill-down still pairs correctly after de-duplication", {
   expect_length(v$pairGroup[[1]], 2L)
   expect_length(v$drillIdx[[1]], 2L)
   expect_length(v$membership[[1]], 1L)
-  expect_equal(sort(v$drillLevels), c("Nausea", "Vomiting"))
+  expect_equal(sort(v$drillLevels[[1]]), c("Nausea", "Vomiting"))
+})
+
+# ---- multi-level drill-down ------------------------------------------------
+
+hier_df <- function() {
+  df <- data.frame(id = c("s1", "s2", "s3"), arm = c("A", "A", "B"),
+                   stringsAsFactors = FALSE)
+  df$SOC <- list(c("Cardiac", "Cardiac"), "Cardiac", "Skin")
+  df$PT  <- list(c("MI", "MI"), "MI", "Rash")
+  df$LLT <- list(c("Inferior MI", "Septal MI"), "Inferior MI", "Redness")
+  df
+}
+
+test_that("view_bars() accepts a hierarchy of drill columns", {
+  v <- (linkagg(hier_df(), id) |>
+          view_bars(SOC, by = arm, drill = c(PT, LLT)))$views[[1]]
+
+  expect_equal(v$drill, c("PT", "LLT"))
+  expect_length(v$drillLevels, 2L)             # one level set per depth
+  expect_equal(v$drillLevels[[1]], c("MI", "Rash"))   # all PTs, sorted
+  expect_equal(sort(v$drillLevels[[2]]),
+               c("Inferior MI", "Redness", "Septal MI"))
+  expect_length(v$drillIdx, 2L)
+
+  # Each depth stays aligned entry by entry with pairGroup.
+  for (k in seq_along(v$drillIdx)) {
+    expect_equal(lengths(v$drillIdx[[k]]), lengths(v$pairGroup))
+  }
+})
+
+test_that("strings and bare names both work for a drill hierarchy", {
+  a <- (linkagg(hier_df(), id) |>
+          view_bars(SOC, drill = c(PT, LLT)))$views[[1]]
+  b <- (linkagg(hier_df(), id) |>
+          view_bars(SOC, drill = c("PT", "LLT")))$views[[1]]
+  expect_equal(a$drill, b$drill)
+  expect_equal(a$drillLevels, b$drillLevels)
+})
+
+test_that("a single drill column still yields one level, not a flat vector", {
+  v <- (linkagg(hier_df(), id) |> view_bars(SOC, drill = PT))$views[[1]]
+  expect_equal(v$drill, "PT")
+  expect_length(v$drillLevels, 1L)
+  expect_equal(v$drillLevels[[1]], c("MI", "Rash"))
+})
+
+test_that("every drill level must pair with the group element by element", {
+  df <- hier_df()
+  df$LLT[[1]] <- "Inferior MI"          # one entry where the group has two
+  expect_error(
+    linkagg(df, id) |> view_bars(SOC, drill = c(PT, LLT)),
+    "pair up element by element"
+  )
+  expect_error(
+    linkagg(df, id) |> view_bars(SOC, drill = c(PT, arm)),
+    "shaped like `group`"
+  )
+})
+
+test_that("subjects reaching a deep term are recoverable from the indices", {
+  v <- (linkagg(hier_df(), id) |>
+          view_bars(SOC, drill = c(PT, LLT)))$views[[1]]
+  gi <- match("Cardiac", v$levels) - 1L
+  pi <- match("MI", v$drillLevels[[1]]) - 1L
+  li <- match("Septal MI", v$drillLevels[[2]]) - 1L
+
+  # Walk Cardiac > MI > Septal MI and collect the subjects, the way the
+  # display resolves a drill path.
+  on_path <- vapply(seq_len(3), function(i) {
+    g <- v$pairGroup[[i]]; p <- v$drillIdx[[1]][[i]]; l <- v$drillIdx[[2]][[i]]
+    any(g == gi & p == pi & l == li)
+  }, logical(1))
+  expect_equal(which(on_path), 1L)      # only s1 had a septal MI
 })
