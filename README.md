@@ -14,11 +14,12 @@ Output is an htmlwidget. It works inside Shiny, and it saves to a single
 self-contained HTML file with no server, so an interactive figure can be
 emailed, archived, and opened offline in five years like a static one.
 
-![A brushed eDISH plot with adverse event bars filling to the share of their own subjects selected](man/figures/linkagg-cdisc.png)
+![Hovering a point for its subject id, brushing the liver corner so the bars fill, then drilling from organ class to preferred term](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-figure.gif)
 
-*Real CDISC pilot data. Twenty-two subjects are brushed in the liver corner,
-and every bar reports how many of its own subjects that selection accounts
-for, per arm. The volcano beneath fills the same way.*
+*Real CDISC pilot data, recorded from the figure itself. Hovering a mark names
+the subject; brushing the liver corner fills every bar and volcano point to the
+share of its own subjects caught; clicking a bar label walks down the MedDRA
+hierarchy, and the breadcrumb walks back up.*
 
 ## Status
 
@@ -67,7 +68,7 @@ directions. Run it with one call:
 linkagg::run_linkagg_app()
 ```
 
-![The bundled Shiny dashboard, with one cell of a panel grid brushed and the summary computed in R](man/figures/linkagg-app.png)
+![Changing the grid variable rebuilds the figure, then brushing one cell updates the cards and crosstab computed in R](https://raw.githubusercontent.com/renit12345-ship-it/linkagg/main/.github/media/linkagg-app.gif)
 
 **Shiny drives the figure.** The sidebar chooses the grid variables, the bar
 denominator and whether threads are drawn, and the figure is rebuilt server
@@ -384,6 +385,16 @@ every group it belongs to. This is the mapping the package exists to keep, made
 visible. Turn it off with `linkagg(..., threads = FALSE)` for a quieter figure.
 Threads are capped (`thread_cap`) and are suppressed when the browser reports
 `prefers-reduced-motion`.
+
+## Screenshots
+
+The figure on real CDISC data, and the same trial as a panel grid:
+
+![The CDISC figure with a selection active](man/figures/linkagg-cdisc.png)
+
+![The PBC trial as a four by two panel grid](man/figures/linkagg-grid.png)
+
+![The bundled Shiny dashboard](man/figures/linkagg-app.png)
 
 ## Scope
 
