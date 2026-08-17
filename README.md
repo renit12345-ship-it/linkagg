@@ -17,8 +17,8 @@ emailed, archived, and opened offline in five years like a static one.
 ## Status
 
 Early. Not on CRAN. Passes `R CMD check` clean (0 errors, 0 warnings, 0 notes)
-on R 4.5.3, with 124 passing tests. Runs on real trial data — see *On a real
-trial* below — but has not yet been used by anyone for a review question of
+on R 4.5.3, with 124 passing tests. Runs on real trial data (see *On a real
+trial* below), but has not yet been used by anyone for a review question of
 their own, and is not validated for regulated use.
 
 The layout is fixed: row-level displays on the left, aggregate displays on the
@@ -49,7 +49,7 @@ against placebo, 1974 to 1984, 312 randomised patients, distributed in the
 Two things come out of it that a static safety pack does not give you.
 
 **The volcano finds nothing, correctly.** No clinical finding separates the
-arms — the smallest p is 0.071 — which is what randomisation of baseline
+arms, the smallest p being 0.071, which is what randomisation of baseline
 findings should look like. A display that manufactures a signal here would be
 worse than useless.
 
@@ -232,9 +232,9 @@ Each point stands for many subjects, which makes it an aggregate mark in the
 sense this package exists for: with a selection active every point fills from
 the bottom in proportion to the share of *its own* subjects selected. Brushing
 the Hy's law corner of an eDISH plot and reading the volcano answers a question
-no static safety pack contains — which adverse event signals those subjects
+no static safety pack contains: which adverse event signals those subjects
 actually carry. In the bundled example, brushing 15 subjects from that corner
-fills the four liver terms to 17–29% and every background term to under 6%.
+fills the four liver terms to 17 to 29% and every background term to under 6%.
 
 The recognised weakness of a volcano is that it shows an effect estimate
 without its precision: a term seen in two subjects can sit as far from the
@@ -249,37 +249,33 @@ line is a guide to the eye with no multiplicity adjustment implied.
 Selection is a `Uint8Array` mask plus an `Int32Array` of selected indices, not a
 `Set`. Point pixel positions are precomputed once, so brushing compares numbers
 rather than running an inverse scale per point. Above `canvas_threshold` rows
-(6,000 by default) the scatter renders to canvas, so recolouring is one pass
-instead of touching every DOM node.
+(6,000 by default) the scatter renders to canvas.
+
+The marks are drawn in two layers. Every mark goes on a base layer, painted
+once per layout. Only the current selection goes on the layer above it, and a
+selection dims the base with a CSS opacity change rather than repainting it.
+The cost of a brush is therefore the size of the *selection*, not the size of
+the dataset, which is what keeps a million rows responsive.
 
 Measured end to end on one machine: building the spec in R, writing the file,
 and the redraw the browser reports after a brush.
 
-| subjects  | spec  | file size | brush redraw |
-|-----------|-------|-----------|--------------|
-| 254 (real CDISC pilot) | 0.02 s | 0.4 MB | 3 ms |
-| 10,000    | 0.03 s | 0.6 MB   | 5 ms      |
-| 200,000   | 0.83 s | 12.3 MB  | 344 ms    |
-| 1,000,000 | 4.5 s  | 61.3 MB  | 1,746 ms  |
+| subjects  | spec   | file size | brush redraw |
+|-----------|--------|-----------|--------------|
+| 254 (CDISC pilot) | 0.02 s | 0.4 MB | 3 ms |
+| 10,000    | 0.03 s | 0.6 MB   | 5 ms   |
+| 200,000   | 0.85 s | 12.3 MB  | 45 ms  |
+| 1,000,000 | 4.5 s  | 61.3 MB  | 113 ms |
 
-**Read the file-size column before the timing column.** The row-level data
-travels inside the HTML, so size grows linearly at roughly 60 MB per million
-subjects. That, not speed, is the real ceiling on a self-contained file:
+A million subjects redraw in about a tenth of a second, so drawing is no
+longer what limits the size of a figure.
 
-- Up to ~200,000 subjects a brush stays under half a second and the file is
-  small enough to email. This is the range the package is built for, and it is
-  already far beyond any single trial.
-- At 1,000,000 it still works, but a 61 MB file and a 1.7-second redraw are
-  past the point where anyone would call it interactive.
-- At 10,000,000 the arithmetic gives a ~600 MB file. That is not a figure you
-  can archive or send, whatever the redraw time. Registry-scale cohorts need
-  the aggregation done in R, with the widget receiving the aggregates and a
-  sample of the row layer — not every row.
-
-Drawing is the cost above roughly 100,000 subjects, not the arithmetic:
-resolving a full selection through the membership index stays in the low
-milliseconds, while repainting a million marks does not. Turning `threads`
-off is the single biggest saving at that size.
+What limits it now is the file. The row-level data travels inside the HTML, at
+roughly 60 MB per million subjects, so a million-subject figure is a 61 MB
+file. That is fine to open and awkward to email, and ten million would be
+around 600 MB, which is not a figure you can archive or send at all. Cohorts
+of that size want the aggregation done in R, with the widget receiving the
+aggregate counts and a sample of the row layer rather than every row.
 
 ## Provenance
 
@@ -332,13 +328,16 @@ visible. Turn it off with `linkagg(..., threads = FALSE)` for a quieter figure.
 Threads are capped (`thread_cap`) and are suppressed when the browser reports
 `prefers-reduced-motion`.
 
-## What it does not do yet
+## Scope
 
-- One scatter, one bar display and one histogram per figure
-- No boxplots, no time-to-onset displays
-- Above roughly 100,000 rows, drawing rather than arithmetic becomes the limit
-- Never used on a real study: no clinical adopter, no real-data shakeout
-- Not validated for any regulated use
+A figure holds one scatter, one bar display, one histogram and one volcano, in
+fixed positions. Boxplots and time to onset displays are not implemented.
+Above a million subjects the size of the self contained file, not the redraw,
+is what sets the practical ceiling.
+
+The package is a research tool. It is not qualified software and carries no
+validation package, so it is suited to exploration and to the figures that
+support a discussion, rather than to producing a regulatory deliverable.
 
 ## Licence
 

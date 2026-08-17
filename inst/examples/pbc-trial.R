@@ -7,8 +7,8 @@
 #
 # Note what the aggregate groups are here. This is not an adverse event
 # dataset, so the bars are baseline clinical findings rather than treated-
-# emergent events. The mechanic is the same — each bar stands for many
-# patients — but read the clinical content accordingly.
+# emergent events. The mechanic is the same, each bar stands for many
+# patients, but read the clinical content accordingly.
 #
 # Run it with:  source(system.file("examples/pbc-trial.R", package = "linkagg"))
 

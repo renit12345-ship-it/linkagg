@@ -345,8 +345,8 @@ view_bars <- function(spec, group, by = NULL, drill = NULL,
   })
   # Counting membership, which must be one entry per subject per group. A bar
   # is a count of subjects measured against an arm's population, so a subject
-  # listed under one group several times — an events dataset carries one row
-  # per preferred term, and several terms share a system organ class — has to
+  # listed under one group several times (an events dataset carries one row
+  # per preferred term, and several terms share a system organ class) has to
   # count once. Without this the numerator can exceed its own denominator and
   # the bar reads over 100%.
   membership <- lapply(pair_group, function(z) as.integer(unique(z)))

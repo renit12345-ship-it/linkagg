@@ -65,7 +65,14 @@ HTMLWidgets.widget({
           hoverIx = -1; hideTip();
           if (st.halo) st.halo.attr("opacity", 0);
         });
+    // Two canvas layers. The base holds every mark and is painted once; the
+    // overlay holds only the current selection. A selection dims the base with
+    // a CSS opacity change instead of repainting it, so the cost of a brush is
+    // the size of the selection rather than the size of the dataset.
     var canvas = stage.append("canvas")
+        .style("position", "absolute").style("top", 0).style("left", 0)
+        .style("pointer-events", "none").style("width", "100%");
+    var overlay = stage.append("canvas")
         .style("position", "absolute").style("top", 0).style("left", 0)
         .style("pointer-events", "none").style("width", "100%");
     var svg = stage.append("svg").style("position", "relative")
@@ -227,7 +234,7 @@ HTMLWidgets.widget({
       var path = arr(drillPath);
       // Maps a displayed row back to its index in the full level set. At the
       // top these agree, but a drilled display shows only the terms present
-      // under the path, re-sorted by count, so the two diverge — and it is the
+      // under the path, re-sorted by count, so the two diverge, and it is the
       // full-set index that identifies a term when the path is extended.
       var globalIx;
       if (!path.length || !bv.drillLevels) {
@@ -555,7 +562,7 @@ HTMLWidgets.widget({
 
         // Grid strips: column headings across the top, row headings down the
         // right, each drawn once rather than repeated on every panel. They are
-        // set typographically instead of in filled boxes — at six panels the
+        // set typographically instead of in filled boxes. At six panels the
         // boxes framed the labels more strongly than the data.
         if (fg.grid && cy === 0) {
           gAxis.append("text").attr("x", x0).attr("y", y0 - 12)
@@ -600,7 +607,7 @@ HTMLWidgets.widget({
           .text(String(one(pv.ylab)).toUpperCase());
       gTag.append("text").attr("x", SC.l).attr("y", 26).attr("fill", PAL.dim)
           .style("font-size", "10px").style("letter-spacing", "0.07em")
-          .text("ROW LEVEL \u2014 " + st.n + " ROWS" +
+          .text("ROW LEVEL \u00b7 " + st.n + " ROWS" +
                 (st.facets ? " \u00b7 BY " + String(st.facets.col).toUpperCase() +
                    (st.facets.rowLevels
                       ? " \u00d7 " + String(st.facets.rowCol).toUpperCase() : "") : "") +
@@ -620,18 +627,53 @@ HTMLWidgets.widget({
           .attr("opacity", 0).attr("pointer-events", "none");
     }
 
-    function sizeCanvas() {
-      var node = canvas.node();
+    function sizeCanvas(sel) {
+      var node = (sel || canvas).node();
       var cssW = stage.node().clientWidth || st.VB.w;
       var k = cssW / st.VB.w, dpr = window.devicePixelRatio || 1;
       var cssH = st.VB.h * k;
-      node.width = Math.max(1, Math.round(cssW * dpr));
-      node.height = Math.max(1, Math.round(cssH * dpr));
-      canvas.style("height", cssH + "px");
+      var w = Math.max(1, Math.round(cssW * dpr));
+      var h = Math.max(1, Math.round(cssH * dpr));
       var ctx = node.getContext("2d");
+      // Reallocating the backing store is costly at these sizes, so resize
+      // only when the geometry has actually changed.
+      if (node.width !== w || node.height !== h) {
+        node.width = w; node.height = h;
+        (sel || canvas).style("height", cssH + "px");
+      }
       ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
       ctx.clearRect(0, 0, st.VB.w, st.VB.h);
       return ctx;
+    }
+
+    function markRadius() {
+      return st.n > 400000 ? 0.8 : st.n > 40000 ? 0.9
+           : st.n > 15000 ? 1.2 : 1.7;
+    }
+
+    // Squares below about a pixel and a half are indistinguishable from discs
+    // and fill several times faster, which is what the largest datasets are
+    // made of.
+    function paintMarks(ctx, idx, count, r, colour, alpha) {
+      var d = r * 2, i, j;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = colour;
+      if (r < 1.5) {
+        for (i = 0; i < count; i++) {
+          j = idx ? idx[i] : i;
+          if (st.px[j] < -1000) continue;
+          ctx.fillRect(st.px[j] - r, st.py[j] - r, d, d);
+        }
+      } else {
+        for (i = 0; i < count; i++) {
+          j = idx ? idx[i] : i;
+          if (st.px[j] < -1000) continue;
+          ctx.beginPath();
+          ctx.arc(st.px[j], st.py[j], r, 0, 6.283185);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
     }
 
     // Draws the whole cohort into every panel, faintly, behind the live marks.
@@ -653,37 +695,23 @@ HTMLWidgets.widget({
       ctx.globalAlpha = 1;
     }
 
-    function paintCanvas() {
+    // Every mark, painted once per layout rather than once per selection.
+    function paintBase() {
       if (!st.useCanvas || !st.pv) return;
-      var node = canvas.node();
-      var cssW = stage.node().clientWidth || st.VB.w;
-      var k = cssW / st.VB.w, dpr = window.devicePixelRatio || 1;
-      var cssH = st.VB.h * k;
-      node.width = Math.max(1, Math.round(cssW * dpr));
-      node.height = Math.max(1, Math.round(cssH * dpr));
-      canvas.style("height", cssH + "px");
-      var ctx = node.getContext("2d");
-      ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
-      ctx.clearRect(0, 0, st.VB.w, st.VB.h);
-      var r = st.n > 40000 ? 0.9 : st.n > 15000 ? 1.2 : 1.7, i;
-      ctx.globalAlpha = st.has ? 0.45 : 0.55;
-      ctx.fillStyle = st.has ? PAL.mute : PAL.data;
-      for (i = 0; i < st.n; i++) {
-        if (st.has && st.mask[i]) continue;
-        if (st.px[i] < -1000) continue;
-        ctx.beginPath(); ctx.arc(st.px[i], st.py[i], r, 0, 6.283185); ctx.fill();
-      }
-      if (st.has) {
-        ctx.globalAlpha = 0.95;
-        ctx.fillStyle = PAL.select;
-        for (i = 0; i < st.selCount; i++) {
-          var j = st.selIdx[i];
-          if (st.px[j] < -1000) continue;
-          ctx.beginPath(); ctx.arc(st.px[j], st.py[j], r + 0.5, 0, 6.283185); ctx.fill();
-        }
-      }
-      ctx.globalAlpha = 1;
+      paintMarks(sizeCanvas(canvas), null, st.n, markRadius(), PAL.data, 0.55);
     }
+
+    // Only the selected marks. This is what runs on every brush.
+    function paintSelected() {
+      if (!st.useCanvas || !st.pv) return;
+      canvas.style("opacity", st.has ? 0.3 : 1);
+      var ctx = sizeCanvas(overlay);
+      if (!st.has) return;
+      paintMarks(ctx, st.selIdx, st.selCount, markRadius() + 0.6,
+                 PAL.select, 0.95);
+    }
+
+    function paintCanvas() { paintBase(); paintSelected(); }
 
     // ---- bars, with drill-down -------------------------------------------
     function drawBars() {
@@ -704,7 +732,7 @@ HTMLWidgets.widget({
       var scale = d3.scaleLinear().domain([0, maxV || 1]).range([0, B.w]);
       st.barScale = scale;
 
-      var title = "AGGREGATE \u2014 " + String(one(bv.label)).toUpperCase() +
+      var title = "AGGREGATE \u00b7 " + String(one(bv.label)).toUpperCase() +
                   (pct ? "  (% OF ARM POPULATION)" : "  (COUNT)");
       gTag.append("text").attr("x", B.x0).attr("y", 26).attr("fill", PAL.dim)
           .style("font-size", "10px").style("letter-spacing", "0.07em").text(title);
@@ -879,7 +907,7 @@ HTMLWidgets.widget({
           .attr("y1", top + h).attr("y2", top + h).attr("stroke", PAL.rule);
       gTag.append("text").attr("x", x0).attr("y", top - 8).attr("fill", PAL.dim)
           .style("font-size", "10px").style("letter-spacing", "0.07em")
-          .text("AGGREGATE \u2014 " + String(one(hv.label)).toUpperCase() +
+          .text("AGGREGATE \u00b7 " + String(one(hv.label)).toUpperCase() +
                 (one(hv.log) ? " (LOG10)" : "") + " \u00b7 " + nB + " BINS");
 
       var slot = w / nB, pad = Math.min(2, slot * 0.12);
@@ -1069,7 +1097,8 @@ HTMLWidgets.widget({
       if (st.histAgg) recomputeHits(st.histAgg);
       if (st.volAgg)  recomputeHits(st.volAgg);
 
-      if (st.useCanvas) paintCanvas();
+      // Only the selection layer is repainted here; the base is already drawn.
+      if (st.useCanvas) paintSelected();
       else if (st.ptSel) {
         var mask = st.mask, has = st.has;
         st.ptSel.attr("fill", function (i) {
@@ -1223,7 +1252,7 @@ HTMLWidgets.widget({
       gTag.append("text").attr("x", V.x0).attr("y", V.top - 26)
           .attr("fill", PAL.dim).style("font-size", "10px")
           .style("letter-spacing", "0.07em")
-          .text("AGGREGATE — " + String(one(vv.label)).toUpperCase() +
+          .text("AGGREGATE \u00b7 " + String(one(vv.label)).toUpperCase() +
                 " · RISK DIFFERENCE");
       gVol.append("text").attr("x", V.x0).attr("y", V.top - 12)
           .attr("fill", PAL.dim).style("font-size", "9.5px")
@@ -1427,7 +1456,10 @@ HTMLWidgets.widget({
         // drawScatterFrame decides whether a context layer is worth drawing,
         // so the canvas visibility is settled after it, not before.
         canvas.style("display", (st.useCanvas || st.ghost) ? "block" : "none");
+        overlay.style("display", st.useCanvas ? "block" : "none");
+        canvas.style("opacity", 1);
         paintGhosts();
+        paintBase();
         drawBars();
         drawHist();
         drawVolcano();

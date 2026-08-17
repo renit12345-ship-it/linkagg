@@ -209,18 +209,18 @@ server <- function(input, output, session) {
     if (is.null(s)) NULL else adsl[adsl$USUBJID %in% s, ]
   })
 
-  fmt1 <- function(v) if (!length(v) || all(is.na(v))) "—" else
+  fmt1 <- function(v) if (!length(v) || all(is.na(v))) "n/a" else
     format(round(stats::median(v, na.rm = TRUE), 2), nsmall = 2)
 
-  output$s_n    <- renderText(if (is.null(sel_df())) "—" else nrow(sel_df()))
+  output$s_n    <- renderText(if (is.null(sel_df())) "n/a" else nrow(sel_df()))
   output$s_pct  <- renderText({
     d <- sel_df()
     if (is.null(d)) "no selection active"
     else sprintf("%.1f%% of %d subjects", 100 * nrow(d) / nrow(adsl), nrow(adsl))
   })
-  output$s_alt  <- renderText(if (is.null(sel_df())) "—" else fmt1(sel_df()$ALT))
-  output$s_bili <- renderText(if (is.null(sel_df())) "—" else fmt1(sel_df()$TBILI))
-  output$s_src  <- renderText(if (is.null(sel_df())) "—" else "brushed region")
+  output$s_alt  <- renderText(if (is.null(sel_df())) "n/a" else fmt1(sel_df()$ALT))
+  output$s_bili <- renderText(if (is.null(sel_df())) "n/a" else fmt1(sel_df()$TBILI))
+  output$s_src  <- renderText(if (is.null(sel_df())) "n/a" else "brushed region")
 
   output$crosstab <- renderUI({
     d <- sel_df()
